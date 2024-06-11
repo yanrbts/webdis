@@ -367,7 +367,7 @@ static struct apientry *getApiFunc(const char *uri) {
     return NULL;
 }
 
-static int splitstr(char *line, char **argv) {
+static int splitstr(char *line, struct cmd *cmd) {
     int argc = 0;
     char *line_start = line;
 
@@ -385,21 +385,19 @@ static int splitstr(char *line, char **argv) {
         }
     }
 
-    // *argv = (char **)malloc(sizeof(char *) * argc);
-    // if (*argv == NULL) {
-    //     goto out;
-    // }
-
     int cur_arg = 0;
     line = line_start;
 
     while (cur_arg < argc && *line != '\0') {
+		char *tmp;
+		size_t len;
+
         while (*line == ' ') {
             line++;
         }
 
         if (*line != '\0') {
-            argv[cur_arg++] = line;
+			tmp = line;
         }
 
         while (*line != ' ' && *line != '\n' && *line != '\0') {
@@ -408,11 +406,22 @@ static int splitstr(char *line, char **argv) {
 
         if (*line != '\0') {
             *line = '\0';
+
+			len = strlen(tmp);
+            cmd->argv[cur_arg] = calloc(1, len);
+			memcpy(cmd->argv[cur_arg], tmp, len);
+			cmd->argv_len[cur_arg] = len;
+			cur_arg++;
+
             line++;
+        } else {
+            len = strlen(tmp);
+            cmd->argv[cur_arg] = calloc(1, len);
+			memcpy(cmd->argv[cur_arg], tmp, len);
+			cmd->argv_len[cur_arg] = len;
         }
     }
 
-out:
     return argc;
 }
 
@@ -438,7 +447,7 @@ cmd_run_api(struct worker *w, struct http_client *client,
 	cmd->fd = client->fd;
 	cmd->database = w->s->cfg->database;
 
-	splitstr(buffer, cmd->argv);
+	splitstr(buffer, cmd);
 
 	/* get output formatting function */
 	uri_len = cmd_select_format(client, cmd, uri, uri_len, &f_format);
