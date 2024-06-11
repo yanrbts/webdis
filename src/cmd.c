@@ -297,6 +297,180 @@ cmd_run(struct worker *w, struct http_client *client,
 	return CMD_REDIS_UNAVAIL;
 }
 
+/****************************************************************************************/
+
+static int user_register(const char *buf, size_t len, 
+	const char *format, char *outcmd, size_t outlen) {
+	int ret = -1;
+	json_t *root;
+	json_error_t error;
+
+	(void)len;
+
+	root = json_loads(buf, 0, &error);
+	if(!root) {
+		fprintf(stderr, "Error: %s (line %d)\n", error.text, error.line);
+		goto end;
+	}
+
+	json_t *machine = json_object_get(root, "machine");
+	if (!json_is_string(machine)) {
+		fprintf(stderr, "error: machine is not a string\n");
+		json_decref(root);
+		goto end;
+	}
+
+	json_t *username = json_object_get(root, "username");
+	if (!json_is_string(username)) {
+		fprintf(stderr, "error: username is not a string\n");
+		json_decref(root);
+		goto end;
+	}
+
+	json_t *flag = json_object_get(root, "flag");
+	if (!json_is_integer(flag)) {
+		fprintf(stderr, "error: flag is not a integer\n");
+		json_decref(root);
+		goto end;
+	}
+	
+	snprintf(outcmd, outlen, 
+			format, 
+			json_string_value(machine),
+			json_string_value(machine),
+			json_string_value(username));
+	ret = 0;
+	json_decref(root);
+end:
+	return ret;
+}
+
+static struct apientry apis[] = {
+	{	
+		.uri = "register", 
+		.cmdline = "HMSET userkey:%s uuid %s username %s", 
+		.count = 6,
+		.func = user_register,
+		.method = "POST"
+	},
+};
+
+static struct apientry *getApiFunc(const char *uri) {
+    int i;
+    int num = sizeof(apis) / sizeof(struct apientry);
+
+    for (i = 0; i < num; i++) {
+        struct apientry *api = apis + i;
+        if (strcmp(uri, api->uri) == 0)
+            return api;
+    }
+    return NULL;
+}
+
+static int splitstr(char *line, char **argv) {
+    int argc = 0;
+    char *line_start = line;
+
+    while (*line != '\0') {
+        while (*line == ' ') {
+            line++;
+        }
+
+        if (*line != '\0') {
+            argc++;
+        }
+
+        while (*line != ' ' && *line != '\n' && *line != '\0') {
+            line++;
+        }
+    }
+
+    // *argv = (char **)malloc(sizeof(char *) * argc);
+    // if (*argv == NULL) {
+    //     goto out;
+    // }
+
+    int cur_arg = 0;
+    line = line_start;
+
+    while (cur_arg < argc && *line != '\0') {
+        while (*line == ' ') {
+            line++;
+        }
+
+        if (*line != '\0') {
+            argv[cur_arg++] = line;
+        }
+
+        while (*line != ' ' && *line != '\n' && *line != '\0') {
+            line++;
+        }
+
+        if (*line != '\0') {
+            *line = '\0';
+            line++;
+        }
+    }
+
+out:
+    return argc;
+}
+
+cmd_response_t
+cmd_run_api(struct worker *w, struct http_client *client,
+		const char *uri, size_t uri_len,
+		const char *body, size_t body_len) {
+	struct cmd *cmd;
+	formatting_fun f_format;
+	struct apientry *api;
+	char buffer[1024] = {0};
+
+	/* Incorrect parameters */
+	if(!uri || uri_len == 0 || !body || body_len == 0) {
+		return CMD_PARAM_ERROR;
+	}
+
+	api = getApiFunc(uri);
+
+	api->func(body, body_len, api->cmdline, buffer, sizeof(buffer));
+	
+	cmd = cmd_new(client, api->count);
+	cmd->fd = client->fd;
+	cmd->database = w->s->cfg->database;
+
+	splitstr(buffer, cmd->argv);
+
+	/* get output formatting function */
+	uri_len = cmd_select_format(client, cmd, uri, uri_len, &f_format);
+	/* add HTTP info */
+	cmd_setup(cmd, client);
+
+	if(cmd_is_subscribe(cmd)) {
+		/* create a new connection to Redis */
+		cmd->ac = (redisAsyncContext*)pool_connect(w->pool, cmd->database, 0);
+
+		/* register with the client, used upon disconnection */
+		client->reused_cmd = cmd;
+		cmd->pub_sub_client = client;
+	} else if(cmd->database != w->s->cfg->database) {
+		/* create a new connection to Redis for custom DBs */
+		cmd->ac = (redisAsyncContext*)pool_connect(w->pool, cmd->database, 0);
+	} else {
+		/* get a connection from the pool */
+		cmd->ac = (redisAsyncContext*)pool_get_context(w->pool);
+	}
+
+	/* send it off! */
+	if(cmd->ac) {
+		cmd_send(cmd, f_format);
+		return CMD_SENT;
+	}
+	/* failed to find a suitable connection to Redis. */
+	cmd_free(cmd);
+	client->reused_cmd = NULL;
+	return CMD_REDIS_UNAVAIL;
+}
+
 void
 cmd_send(struct cmd *cmd, formatting_fun f_format) {
 	redisAsyncCommandArgv(cmd->ac, f_format, cmd, cmd->count,

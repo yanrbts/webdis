@@ -56,6 +56,15 @@ struct subscription {
 	struct cmd *cmd;
 };
 
+typedef int(*jparsefunc)(const char *buf, size_t len, const char *format, char *outcmd, size_t outlen);
+struct apientry {
+	char *uri;                  /* HTTP URI */
+	char *cmdline;				/* command */
+	int count;					/* Number of command parameters */
+	jparsefunc	func;
+	char *method;               /* POST / GET */
+};
+
 struct cmd *
 cmd_new(struct http_client *c, int count);
 
@@ -67,6 +76,11 @@ cmd_free(struct cmd *c);
 
 cmd_response_t
 cmd_run(struct worker *w, struct http_client *client,
+		const char *uri, size_t uri_len,
+		const char *body, size_t body_len);
+
+cmd_response_t
+cmd_run_api(struct worker *w, struct http_client *client,
 		const char *uri, size_t uri_len,
 		const char *body, size_t body_len);
 
@@ -85,6 +99,9 @@ cmd_is_subscribe(struct cmd *cmd);
 
 void
 cmd_send(struct cmd *cmd, formatting_fun f_format);
+
+void
+cmd_send_api(struct cmd *cmd, formatting_fun f_format);
 
 void
 cmd_setup(struct cmd *cmd, struct http_client *client);
