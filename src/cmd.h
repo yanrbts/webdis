@@ -16,10 +16,12 @@ struct cmd;
 typedef void (*formatting_fun)(redisAsyncContext *, void *, void *);
 typedef char* (*ws_error_fun)(int http_status, const char *msg, size_t msg_sz, size_t *out_sz);
 
-typedef enum {CMD_SENT,
+typedef enum {
+	CMD_SENT,
 	CMD_PARAM_ERROR,
 	CMD_ACL_FAIL,
-	CMD_REDIS_UNAVAIL} cmd_response_t;
+	CMD_REDIS_UNAVAIL
+} cmd_response_t;
 
 struct cmd {
 	int fd;
@@ -57,11 +59,13 @@ struct subscription {
 };
 
 typedef int(*jparsefunc)(const char *buf, size_t len, const char *format, char *outcmd, size_t outlen);
+
 struct apientry {
 	char *uri;                  /* HTTP URI */
 	char *cmdline;				/* command */
 	int count;					/* Number of command parameters */
-	jparsefunc	func;
+	jparsefunc	func;			/* Request parsing function */
+	formatting_fun replyfunc;	/* Request response function */
 	char *method;               /* POST / GET */
 };
 

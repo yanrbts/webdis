@@ -220,7 +220,8 @@ worker_process_client(struct http_client *c) {
 
 		case HTTP_POST:
 			slog(w->s, WEBDIS_DEBUG, c->path, c->path_sz);
-			ret = cmd_run(c->w, c, c->body, c->body_sz, NULL, 0);
+			// ret = cmd_run(c->w, c, c->body, c->body_sz, NULL, 0);
+			ret = cmd_run_api(c->w, c, 1+c->path, c->path_sz-1, c->body, c->body_sz);
 			break;
 
 		case HTTP_PUT:

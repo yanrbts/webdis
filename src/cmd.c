@@ -299,60 +299,39 @@ cmd_run(struct worker *w, struct http_client *client,
 
 /****************************************************************************************/
 
-static int user_register(const char *buf, size_t len, 
-	const char *format, char *outcmd, size_t outlen) {
-	int ret = -1;
-	json_t *root;
-	json_error_t error;
-
-	(void)len;
-
-	root = json_loads(buf, 0, &error);
-	if(!root) {
-		fprintf(stderr, "Error: %s (line %d)\n", error.text, error.line);
-		goto end;
-	}
-
-	json_t *machine = json_object_get(root, "machine");
-	if (!json_is_string(machine)) {
-		fprintf(stderr, "error: machine is not a string\n");
-		json_decref(root);
-		goto end;
-	}
-
-	json_t *username = json_object_get(root, "username");
-	if (!json_is_string(username)) {
-		fprintf(stderr, "error: username is not a string\n");
-		json_decref(root);
-		goto end;
-	}
-
-	json_t *flag = json_object_get(root, "flag");
-	if (!json_is_integer(flag)) {
-		fprintf(stderr, "error: flag is not a integer\n");
-		json_decref(root);
-		goto end;
-	}
-	
-	snprintf(outcmd, outlen, 
-			format, 
-			json_string_value(machine),
-			json_string_value(machine),
-			json_string_value(username));
-	ret = 0;
-	json_decref(root);
-end:
-	return ret;
-}
-
 static struct apientry apis[] = {
 	{	
-		.uri = "register", 
-		.cmdline = "HMSET userkey:%s uuid %s username %s", 
+		.uri = "register",
+		.cmdline = "HMSET userkey:%s uuid %s username %s",
 		.count = 6,
-		.func = user_register,
+		.func = json_register_parser,
+		.replyfunc = json_api_reply,
 		.method = "POST"
 	},
+	{	
+		.uri = "fileset",
+		.cmdline = "HSET filekey:%s %s %s",
+		.count = 4,
+		.func = json_fileset_parser,
+		.replyfunc = json_api_reply,
+		.method = "POST"
+	},
+	{
+		.uri = "filegettrace",
+		.cmdline = "HSCAN filekey:%s %d MATCH trace:* COUNT %d",
+		.count = 7,
+		.func = json_trace_parser,
+		.replyfunc = json_hscan_reply,
+		.method = "POST"
+	},
+	{
+		.uri = "filegetall",
+		.cmdline = "HSCAN machine:%s %d COUNT %d",
+		.count = 7,
+		.func = json_trace_parser,
+		.replyfunc = json_hscan_reply,
+		.method = "POST"
+	}
 };
 
 static struct apientry *getApiFunc(const char *uri) {
@@ -408,16 +387,18 @@ static int splitstr(char *line, struct cmd *cmd) {
             *line = '\0';
 
 			len = strlen(tmp);
-            cmd->argv[cur_arg] = calloc(1, len);
+            cmd->argv[cur_arg] = calloc(1, len+1);
 			memcpy(cmd->argv[cur_arg], tmp, len);
+			cmd->argv[cur_arg][len] = '\0';
 			cmd->argv_len[cur_arg] = len;
 			cur_arg++;
 
             line++;
         } else {
             len = strlen(tmp);
-            cmd->argv[cur_arg] = calloc(1, len);
-			memcpy(cmd->argv[cur_arg], tmp, len);
+            cmd->argv[cur_arg] = calloc(1, len+1);
+			memcpy(cmd->argv[cur_arg], tmp, len+1);
+			cmd->argv[cur_arg][len] = '\0';
 			cmd->argv_len[cur_arg] = len;
         }
     }
@@ -430,27 +411,26 @@ cmd_run_api(struct worker *w, struct http_client *client,
 		const char *uri, size_t uri_len,
 		const char *body, size_t body_len) {
 	struct cmd *cmd;
-	formatting_fun f_format;
 	struct apientry *api;
 	char buffer[1024] = {0};
-
+	
 	/* Incorrect parameters */
 	if(!uri || uri_len == 0 || !body || body_len == 0) {
 		return CMD_PARAM_ERROR;
 	}
 
 	api = getApiFunc(uri);
-
-	api->func(body, body_len, api->cmdline, buffer, sizeof(buffer));
+	if (api == NULL)
+		return CMD_PARAM_ERROR;
 	
+	api->func(body, body_len, api->cmdline, buffer, sizeof(buffer));
+
 	cmd = cmd_new(client, api->count);
 	cmd->fd = client->fd;
 	cmd->database = w->s->cfg->database;
 
 	splitstr(buffer, cmd);
 
-	/* get output formatting function */
-	uri_len = cmd_select_format(client, cmd, uri, uri_len, &f_format);
 	/* add HTTP info */
 	cmd_setup(cmd, client);
 
@@ -471,7 +451,7 @@ cmd_run_api(struct worker *w, struct http_client *client,
 
 	/* send it off! */
 	if(cmd->ac) {
-		cmd_send(cmd, f_format);
+		cmd_send(cmd, api->replyfunc);
 		return CMD_SENT;
 	}
 	/* failed to find a suitable connection to Redis. */

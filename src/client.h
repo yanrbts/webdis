@@ -13,11 +13,13 @@ struct cmd;
 typedef enum {
 	LAST_CB_NONE = 0,
 	LAST_CB_KEY = 1,
-	LAST_CB_VAL = 2} last_cb_t;
+	LAST_CB_VAL = 2
+} last_cb_t;
 
 typedef enum {
 	CLIENT_DISCONNECTED = -1,
-	CLIENT_OOM = -2} client_error_t;
+	CLIENT_OOM = -2
+} client_error_t;
 
 struct http_client {
 
