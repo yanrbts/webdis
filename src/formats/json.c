@@ -613,14 +613,8 @@ json_api_expand_array(const redisReply *r) {
 }
 
 static json_t *json_wrap_api_reply(const struct cmd *cmd, const redisReply *r) {
-	int type = 0;
+	(void)cmd;
 	json_t *jlist, *jobj, *jroot = json_object(); /* that's what we return */
-
-	if (strcasecmp(cmd->http_client->path, "filegettrace") == 0) {
-		type = 1;
-	} else if (strcasecmp(cmd->http_client->path, "filegetall") == 0) {
-		type = 2;
-	}
 	
 	char *verb = strdup("flag");
 	switch(r->type) {
@@ -888,7 +882,6 @@ void json_hscan_reply(redisAsyncContext *c, void *r, void *privdata) {
 	redisReply *reply = r;
 	struct cmd *cmd = privdata;
 	char *jstr;
-	unsigned long long cursor = 0;
 	(void)c;
 
 	/* broken connection */
@@ -918,55 +911,36 @@ void json_hscan_reply(redisAsyncContext *c, void *r, void *privdata) {
 		case REDIS_REPLY_STRING:
 			json_object_set_new(jroot, "flag", json_string(reply->str));
 			break;
-
 		case REDIS_REPLY_INTEGER:
-			json_object_set_new(jroot, verb, json_integer(r->integer));
+			json_object_set_new(jroot, "page", json_integer(reply->integer));
 			break;
 
 		case REDIS_REPLY_ARRAY:
-			if(strcasecmp(verb, "HGETALL") == 0) {
-				jobj = json_array_to_keyvalue_reply(r);
-				if(jobj) {
-					json_object_set_new(jroot, verb, jobj);
-				}
-				break;
-			} else if(strcasecmp(verb, "XRANGE") == 0 || strcasecmp(verb, "XREVRANGE") == 0 ||
-					(strcasecmp(verb, "XCLAIM") == 0 &&  r->elements > 0 && r->element[0]->type == REDIS_REPLY_ARRAY)) {
-				jobj = json_singlestream_list(r);
-				if(jobj) {
-					json_object_set_new(jroot, verb, jobj);
-				}
-				break;
-			} else if(strcasecmp(verb, "XREAD") == 0 || strcasecmp(verb, "XREADGROUP") == 0) {
-				jobj = json_xreadstream_list(r);
-				if(jobj) {
-					json_object_set_new(jroot, verb, jobj);
-				}
-				break;
-			} else if(strcasecmp(verb, "XPENDING") == 0) {
-				jobj = json_xpending_list(r);
-				if(jobj) {
-					json_object_set_new(jroot, verb, jobj);
-				}
-				break;
-			} else if(strncasecmp(verb, "GEORADIUS", 9) == 0 && r->elements > 0 && r->element[0]->type == REDIS_REPLY_ARRAY) {
-				jobj = json_georadius_with_list(r);
-				if(jobj) {
-					json_object_set_new(jroot, verb, jobj);
-				}
-				break;
-			}
+		{
+			unsigned long long cursor = 0;
+			redisReply *keys;
 
-			if(!(jlist = json_expand_array(r))) {
-				jlist = json_null();
-			}
+			cursor = strtoull(reply->element[0]->str, NULL, 10);
+			keys = reply->element[1];
+			json_object_set_new(jroot, "page", json_integer(cursor));
 
-			json_object_set_new(jroot, verb, jlist);
-			break;
+			jlist = json_array();
+			json_array_append_new(jlist, reply->type == REDIS_REPLY_ERROR ? json_false() : json_true());
+			// json_array_append_new(jlist, json_string(reply->str));
+			json_object_set_new(jroot, "traces", jlist);
+		}
+		break;
+			
+
+			// jobj = json_array_to_keyvalue_reply(reply);
+			// if(jobj) {
+			// 	json_object_set_new(jroot, "traces", jobj);
+			// }
+			// break;
 
 		case REDIS_REPLY_NIL:
 		default:
-			json_object_set_new(jroot, verb, json_null());
+			json_object_set_new(jroot, "flag", json_null());
 			break;
 	}
 

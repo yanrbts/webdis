@@ -55,7 +55,7 @@ socket_setup(struct server *s, const char *ip, int port) {
 	}
 
 	/* set socket as non-blocking. */
-	ret = fcntl(fd, F_SETFD, O_NONBLOCK);
+	ret = fcntl(fd, F_SETFL, O_NONBLOCK);
 	if (0 != ret) {
 		slog(s, WEBDIS_ERROR, strerror(errno), 0);
 		return -1;
@@ -294,8 +294,8 @@ server_start(struct server *s) {
 	}
 
 	/*set keepalive socket option to do with half connection*/
-        int keep_alive = 1;
-        setsockopt(s->fd , SOL_SOCKET, SO_KEEPALIVE, (void*)&keep_alive, sizeof(keep_alive));
+	int keep_alive = 1;
+	setsockopt(s->fd , SOL_SOCKET, SO_KEEPALIVE, (void*)&keep_alive, sizeof(keep_alive));
 
 	/* start http server */
 	event_set(&s->ev, s->fd, EV_READ | EV_PERSIST, server_can_accept, s);
