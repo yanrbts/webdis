@@ -24,6 +24,7 @@ int json_register_parser(const char *buf, size_t len, const char *format, char *
 int json_fileset_parser(const char *buf, size_t len, const char *format, char *outcmd, size_t outlen);
 int json_fileset_machine_parser(const char *buf, size_t len, const char *format, char *outcmd, size_t outlen);
 int json_trace_parser(const char *buf, size_t len, const char *format, char *outcmd, size_t outlen);
+int json_filegetall_parser(const char *buf, size_t len, const char *format, char *outcmd, size_t outlen);
 
 void json_hscan_reply(redisAsyncContext *c, void *r, void *privdata);
 void json_api_reply(redisAsyncContext *c, void *r, void *privdata);

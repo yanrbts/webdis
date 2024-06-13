@@ -327,8 +327,8 @@ static struct apientry apis[] = {
 	{
 		.uri = "filegetall",
 		.cmdline = "HSCAN machine:%s %d COUNT %d",
-		.count = 7,
-		.func = json_trace_parser,
+		.count = 5,
+		.func = json_filegetall_parser,
 		.replyfunc = json_hscan_reply,
 		.method = "POST"
 	}

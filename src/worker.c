@@ -254,6 +254,5 @@ worker_process_client(struct http_client *c) {
 		default:
 			break;
 	}
-
 }
 

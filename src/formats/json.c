@@ -576,107 +576,33 @@ char* json_ws_error(int http_status, const char *msg, size_t msg_sz, size_t *out
 }
 /*************************************API******************************************/
 
-static json_t *
-json_api_expand_array(const redisReply *r) {
-
-	unsigned int i;
-	json_t *jlist, *sublist;
-	const redisReply *e;
-
-	jlist = json_array();
-	for(i = 0; i < r->elements; ++i) {
-		e = r->element[i];
-		switch(e->type) {
-		case REDIS_REPLY_STATUS:
-		case REDIS_REPLY_STRING:
-			json_array_append_new(jlist, json_string(e->str));
-			break;
-
-		case REDIS_REPLY_INTEGER:
-			json_array_append_new(jlist, json_integer(e->integer));
-			break;
-
-		case REDIS_REPLY_ARRAY:
-			if(!(sublist = json_expand_array(e))) {
-				sublist = json_null();
-			}
-			json_array_append_new(jlist, sublist);
-			break;
-
-		case REDIS_REPLY_NIL:
-		default:
-			json_array_append_new(jlist, json_null());
-			break;
-		}
-	}
-	return jlist;
-}
-
 static json_t *json_wrap_api_reply(const struct cmd *cmd, const redisReply *r) {
 	(void)cmd;
-	json_t *jlist, *jobj, *jroot = json_object(); /* that's what we return */
+
+	json_t *jlist, *jroot = json_object(); /* that's what we return */
 	
 	char *verb = strdup("flag");
 	switch(r->type) {
 		case REDIS_REPLY_STATUS:
 		case REDIS_REPLY_ERROR:
-			// jlist = json_array();
-			// json_array_append_new(jlist,
-			// 	r->type == REDIS_REPLY_ERROR ? json_false() : json_true());
-			// json_array_append_new(jlist, json_string(r->str));
-			json_object_set_new(jroot, verb, r->type == REDIS_REPLY_ERROR ? json_false() : json_string(r->str));
+			json_object_set_new(jroot, 
+								verb, 
+								r->type == REDIS_REPLY_ERROR ? 
+								json_string("FAIL") : 
+								json_string(r->str));
 			break;
 
 		case REDIS_REPLY_STRING:
-			if(strcasecmp(verb, "INFO") == 0) {
-				json_object_set_new(jroot, verb, json_info_reply(r->str));
-			} else {
-				json_object_set_new(jroot, verb, json_string(r->str));
-			}
+			json_object_set_new(jroot, verb, json_string(r->str));
 			break;
-
 		case REDIS_REPLY_INTEGER:
 			json_object_set_new(jroot, verb, json_integer(r->integer));
 			break;
 
 		case REDIS_REPLY_ARRAY:
-			if(strcasecmp(verb, "HGETALL") == 0) {
-				jobj = json_array_to_keyvalue_reply(r);
-				if(jobj) {
-					json_object_set_new(jroot, verb, jobj);
-				}
-				break;
-			} else if(strcasecmp(verb, "XRANGE") == 0 || strcasecmp(verb, "XREVRANGE") == 0 ||
-					(strcasecmp(verb, "XCLAIM") == 0 &&  r->elements > 0 && r->element[0]->type == REDIS_REPLY_ARRAY)) {
-				jobj = json_singlestream_list(r);
-				if(jobj) {
-					json_object_set_new(jroot, verb, jobj);
-				}
-				break;
-			} else if(strcasecmp(verb, "XREAD") == 0 || strcasecmp(verb, "XREADGROUP") == 0) {
-				jobj = json_xreadstream_list(r);
-				if(jobj) {
-					json_object_set_new(jroot, verb, jobj);
-				}
-				break;
-			} else if(strcasecmp(verb, "XPENDING") == 0) {
-				jobj = json_xpending_list(r);
-				if(jobj) {
-					json_object_set_new(jroot, verb, jobj);
-				}
-				break;
-			} else if(strncasecmp(verb, "GEORADIUS", 9) == 0 && r->elements > 0 && r->element[0]->type == REDIS_REPLY_ARRAY) {
-				jobj = json_georadius_with_list(r);
-				if(jobj) {
-					json_object_set_new(jroot, verb, jobj);
-				}
-				break;
-			}
-
 			if(!(jlist = json_expand_array(r))) {
 				jlist = json_null();
 			}
-
 			json_object_set_new(jroot, verb, jlist);
 			break;
 
@@ -737,7 +663,8 @@ end:
 	return ret;
 }
 
-int json_fileset_parser(const char *buf, size_t len, const char *format, char *outcmd, size_t outlen) {
+int json_fileset_parser(const char *buf, size_t len, 
+	const char *format, char *outcmd, size_t outlen) {
 	int ret = -1;
 	json_t *root;
 	json_error_t error;
@@ -848,19 +775,59 @@ end:
 	return ret;
 }
 
+int json_filegetall_parser(const char *buf, size_t len, const char *format, char *outcmd, size_t outlen) {
+	int ret = -1;
+	json_t *root;
+	json_error_t error;
+
+	(void)len;
+
+	root = json_loads(buf, 0, &error);
+	if(!root) {
+		fprintf(stderr, "Error: %s (line %d)\n", error.text, error.line);
+		goto end;
+	}
+
+	json_t *machine = json_object_get(root, "machine");
+	if (!json_is_string(machine)) {
+		fprintf(stderr, "error: uuid is not a string\n");
+		json_decref(root);
+		goto end;
+	}
+
+	json_t *page = json_object_get(root, "page");
+	if (!json_is_integer(page)) {
+		fprintf(stderr, "error: page is not a integer\n");
+		json_decref(root);
+		goto end;
+	}
+
+	snprintf(outcmd, outlen, 
+			format,
+			json_string_value(machine),
+			json_integer_value(page),
+			20);
+	ret = 0;
+
+	json_decref(root);
+end:
+	return ret;
+}
+
 void json_api_reply(redisAsyncContext *c, void *r, void *privdata) {
 	redisReply *reply = r;
 	struct cmd *cmd = privdata;
 	json_t *j;
 	char *jstr;
+
 	(void)c;
 
+	/* broken connection */
 	if(cmd == NULL) {
-		/* broken connection */
 		return;
 	}
-
-	if(reply == NULL) { /* broken Redis link */
+	/* broken Redis link */
+	if(reply == NULL) { 
 		format_send_error(cmd, 503, "Service Unavailable");
 		return;
 	}
@@ -872,7 +839,6 @@ void json_api_reply(redisAsyncContext *c, void *r, void *privdata) {
 	jstr = json_string_output(j, cmd->jsonp);
 	/* send reply */
 	format_send_reply(cmd, jstr, strlen(jstr), "application/json");
-
 	/* cleanup */
 	json_decref(j);
 	free(jstr);
@@ -882,68 +848,75 @@ void json_hscan_reply(redisAsyncContext *c, void *r, void *privdata) {
 	redisReply *reply = r;
 	struct cmd *cmd = privdata;
 	char *jstr;
-	(void)c;
+	json_t *jlist, *jroot;
 
+	(void)c;
 	/* broken connection */
-	if(cmd == NULL) {
+	if(cmd == NULL)
 		return;
-	}
 	/* broken Redis link */
 	if(reply == NULL) {
 		format_send_error(cmd, 503, "Service Unavailable");
 		return;
 	}
 
-	json_t *jlist, *jobj, *jroot = json_object();
+	jroot = json_object();
 
 	switch(reply->type) {
 		case REDIS_REPLY_STATUS:
 		case REDIS_REPLY_ERROR:
-			// jlist = json_array();
-			// json_array_append_new(jlist,
-			// 	r->type == REDIS_REPLY_ERROR ? json_false() : json_true());
-			// json_array_append_new(jlist, json_string(r->str));
 			json_object_set_new(jroot, 
 								"flag", 
-								reply->type == REDIS_REPLY_ERROR ? json_false() : json_string(reply->str));
+								reply->type == REDIS_REPLY_ERROR 
+								? json_string("FAIL") 
+								: json_string(reply->str));
 			break;
 
 		case REDIS_REPLY_STRING:
 			json_object_set_new(jroot, "flag", json_string(reply->str));
 			break;
 		case REDIS_REPLY_INTEGER:
-			json_object_set_new(jroot, "page", json_integer(reply->integer));
+			json_object_set_new(jroot, "flag", json_integer(reply->integer));
 			break;
 
 		case REDIS_REPLY_ARRAY:
-		{
-			unsigned long long cursor = 0;
-			redisReply *keys;
+			{
+				unsigned long long cursor = 0;
+				redisReply *keys;
 
-			cursor = strtoull(reply->element[0]->str, NULL, 10);
-			keys = reply->element[1];
-			json_object_set_new(jroot, "page", json_integer(cursor));
+				cursor = strtoull(reply->element[0]->str, NULL, 10);
+				json_object_set_new(jroot, "page", json_integer(cursor));
 
-			jlist = json_array();
-			json_array_append_new(jlist, reply->type == REDIS_REPLY_ERROR ? json_false() : json_true());
-			// json_array_append_new(jlist, json_string(reply->str));
-			json_object_set_new(jroot, "traces", jlist);
-		}
-		break;
-			
-
-			// jobj = json_array_to_keyvalue_reply(reply);
-			// if(jobj) {
-			// 	json_object_set_new(jroot, "traces", jobj);
-			// }
-			// break;
+				jlist = json_array();
+				keys = reply->element[1];
+				if (reply->type == REDIS_REPLY_ARRAY) {
+					for (size_t i = 0; i < keys->elements; i += 2) {
+						redisReply *key = keys->element[i];
+						redisReply *value = keys->element[i + 1];
+						if (key->type == REDIS_REPLY_STRING && value->type == REDIS_REPLY_STRING) {
+							json_array_append_new(jlist, json_string(value->str));
+						}
+					}
+				} else {
+					json_array_append_new(jlist, json_null());
+				}
+				/* Determine the key name based on the number of command parameters. 
+				 * This callback function is only used by the filegetall and filegettrace 
+				 * interfaces. The number of commands for the filegetall interface is 5, 
+				 * and the number of commands for the filegettrace interface is 7.*/
+				if (cmd->count == 7) {
+					json_object_set_new(jroot, "traces", jlist);
+				} else {
+					json_object_set_new(jroot, "files", jlist);
+				}
+			}
+			break;
 
 		case REDIS_REPLY_NIL:
 		default:
 			json_object_set_new(jroot, "flag", json_null());
 			break;
 	}
-
 	/* get JSON as string, possibly with JSONP wrapper */
 	jstr = json_string_output(jroot, cmd->jsonp);
 	/* send reply */
