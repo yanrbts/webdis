@@ -47,6 +47,9 @@ struct server {
 struct server *
 server_new(const char *cfg_file);
 
+void
+server_stop(struct server *s);
+
 int
 server_start(struct server *s);
 

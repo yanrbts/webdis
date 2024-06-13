@@ -26,8 +26,21 @@ pool_new(struct worker *w, int count) {
 }
 
 void
-pool_free_context(redisAsyncContext *ac) {
+pool_free(struct pool *p) {
+	int i;
 
+	if (p == NULL)
+		return;
+	
+	for (i = 0; i < p->count; i++) {
+		redisAsyncFree((redisAsyncContext*)p->ac[i]);
+	}
+
+	free(p->ac);
+}
+
+void
+pool_free_context(redisAsyncContext *ac) {
 	if (ac)	{
 		redisAsyncDisconnect(ac);
 	}
@@ -87,8 +100,6 @@ pool_schedule_reconnect(struct pool *p) {
 	event_base_set(p->w->base, &pr->ev);
 	evtimer_add(&pr->ev, &pr->tv);
 }
-
-
 
 static void
 pool_on_disconnect(const redisAsyncContext *ac, int status) {

@@ -22,6 +22,9 @@ struct pool *
 pool_new(struct worker *w, int count);
 
 void
+pool_free(struct pool *p);
+
+void
 pool_free_context(redisAsyncContext *ac);
 
 redisAsyncContext *

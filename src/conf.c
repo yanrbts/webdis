@@ -95,7 +95,7 @@ conf_read(const char *filename) {
 	conf->http_threads = 4;
 	conf->user = getuid();
 	conf->group = getgid();
-	conf->logfile = "webdis.log";
+	conf->logfile = strdup("webdis.log");
 	conf->log_fsync.mode = LOG_FSYNC_AUTO;
 	conf->verbosity = WEBDIS_NOTICE;
 	conf->daemonize = 0;
@@ -171,6 +171,7 @@ conf_read(const char *filename) {
 			}
 			free(groupname);
 		} else if(strcmp(json_object_iter_key(kv),"logfile") == 0 && json_typeof(jtmp) == JSON_STRING){
+			free(conf->logfile);
 			conf->logfile = conf_string_or_envvar(json_string_value(jtmp));
 		} else if(strcmp(json_object_iter_key(kv),"log_fsync") == 0) {
 			if(json_typeof(jtmp) == JSON_STRING && strcmp(json_string_value(jtmp), "auto") == 0) {
@@ -303,6 +304,7 @@ conf_parse_acl(json_t *j) {
 		a->cidr.enabled = 1;
 		a->cidr.mask = (mask_bits == 0 ? 0xffffffff : (0xffffffff << (32 - mask_bits)));
 		a->cidr.subnet = ntohl(inet_addr(ip)) & a->cidr.mask;
+		free((char*)s);
 		free(ip);
 	}
 
@@ -361,24 +363,49 @@ conf_parse_acls(json_t *jtab) {
 		} else {
 			tail->next = tmp;
 			tail = tmp;
+			tmp->next = NULL;
 		}
 	}
 
 	return head;
 }
 
+static void conf_free_acls(struct acl *acl) {
+	struct acl *current = acl;
+	struct acl *next;
+
+	while (current != NULL) {
+		next = current->next;
+
+		for (uint32_t i = 0; i < current->disabled.count; i++) {
+			free(current->disabled.commands[i]);
+		}
+		free(current->disabled.commands);
+
+		for (uint32_t i = 0; i < current->enabled.count; i++) {
+			free(current->enabled.commands[i]);
+		}
+		free(current->enabled.commands);
+		
+		if (current->http_basic_auth)
+			free(current->http_basic_auth);
+
+		free(current);
+		current = next;
+	}
+}
+
 void
 conf_free(struct conf *conf) {
-
 	free(conf->redis_host);
 	if(conf->redis_auth) {
 		free(conf->redis_auth->username);
 		free(conf->redis_auth->password);
 	}
 	free(conf->redis_auth);
-
 	free(conf->http_host);
-
+	free(conf->logfile);
+	conf_free_acls(conf->perms);
 	free(conf);
 }
 

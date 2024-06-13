@@ -117,7 +117,6 @@ server_init_ssl(struct server *s) {
 
 struct server *
 server_new(const char *cfg_file) {
-
 	int i;
 	struct server *s = calloc(1, sizeof(struct server));
 
@@ -141,6 +140,21 @@ server_new(const char *cfg_file) {
 
 	pthread_mutex_init(&s->auth_log_mutex, NULL);
 	return s;
+}
+
+void 
+server_stop(struct server *s) {
+	int i;
+
+	for(i = 0; i < s->cfg->http_threads; ++i) {
+		worker_free(s->w[i]);
+	}
+	free(s->w);
+	// event_free(&s->ev);
+	pthread_mutex_destroy(&s->auth_log_mutex);
+	conf_free(s->cfg);
+
+	free(s);
 }
 
 static void
@@ -241,6 +255,8 @@ server_handle_signal(int id) {
 			slog(__server, WEBDIS_INFO, "Webdis terminating", 0);
 			ret = fsync(__server->log.fd);
 			(void)ret;
+			close(__server->log.fd);
+			server_stop(__server);
 			exit(0);
 			break;
 		default:
@@ -259,7 +275,6 @@ server_install_signal_handlers(struct server *s) {
 
 int
 server_start(struct server *s) {
-
 	int i, ret;
 
 	/* initialize libevent */
@@ -312,7 +327,7 @@ server_start(struct server *s) {
 
 	slog(s, WEBDIS_INFO, "Webdis " WEBDIS_VERSION " up and running", 0);
 	event_base_dispatch(s->base);
-
+	event_base_free(s->base);
 	return 0;
 }
 

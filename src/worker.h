@@ -24,6 +24,9 @@ struct worker *
 worker_new(struct server *s);
 
 void
+worker_free(struct worker *w);
+
+void
 worker_start(struct worker *w);
 
 void

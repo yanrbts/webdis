@@ -31,7 +31,25 @@ worker_new(struct server *s) {
 	w->pool = pool_new(w, s->cfg->pool_size_per_thread);
 
 	return w;
+}
 
+void
+worker_free(struct worker *w) {
+	struct timeval tv = {1, 100000}; // 1.1 seconds
+
+	if (w == NULL)
+		return;
+	/* The pthread_cancel() function sends a cancellation request to the thread thread. 
+	 * Whether and when the tar‐get thread reacts to the cancellation request depends 
+	 * on two attributes that are under the control of  that thread: its cancelability 
+	 * state and type.*/
+	pthread_cancel(w->thread);
+	event_base_loopexit(w->base, &tv);
+	/* Wait for the child thread to end */
+	pthread_join(w->thread, NULL);
+	
+	pool_free(w->pool);
+	free(w);
 }
 
 void
@@ -149,13 +167,11 @@ worker_on_new_client(int pipefd, short event, void *ptr) {
 
 static void
 worker_pool_connect(struct worker *w) {
-
 	int i;
 	/* create connections */
 	for(i = 0; i < w->pool->count; ++i) {
 		pool_connect(w->pool, w->s->cfg->database, 1);
 	}
-
 }
 
 static void*
@@ -163,6 +179,17 @@ worker_main(void *p) {
 
 	struct worker *w = p;
 	struct event ev;
+
+	/* pthread_setcancelstate is used to enable or disable the cancellation 
+	 * state of a thread. The following are detailed descriptions of the two states:
+	 * PTHREAD_CANCEL_ENABLE: The thread can respond to cancellation requests. 
+	 * When the thread reaches a cancellation point (such as pthread_testcancel, 
+	 * pthread_join, pthread_cond_wait, etc.), it checks whether there is a cancellation request. 
+	 * If so, it responds to the cancellation request and terminates the thread.
+	 * PTHREAD_CANCEL_DISABLE: The thread ignores cancellation requests. 
+	 * Even if the thread is canceled by other threads, the thread will not 
+	 * respond and continue to execute.*/
+	pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, NULL);
 
 	/* setup libevent */
 	w->base = event_base_new();
@@ -174,16 +201,16 @@ worker_main(void *p) {
 
 	/* connect to Redis */
 	worker_pool_connect(w);
-
 	/* loop */
 	event_base_dispatch(w->base);
 
+	event_del(&ev);
+	event_base_free(w->base);
 	return NULL;
 }
 
 void
 worker_start(struct worker *w) {
-
 	pthread_create(&w->thread, NULL, worker_main, w);
 }
 
@@ -192,7 +219,6 @@ worker_start(struct worker *w) {
  */
 void
 worker_add_client(struct worker *w, struct http_client *c) {
-
 	/* write into pipe link */
 	unsigned long addr = (unsigned long)c;
 	int ret = write(w->link[1], &addr, sizeof(addr));
@@ -204,7 +230,6 @@ worker_add_client(struct worker *w, struct http_client *c) {
  */
 void
 worker_process_client(struct http_client *c) {
-
 	/* check that the command can be executed */
 	struct worker *w = c->w;
 	cmd_response_t ret = CMD_PARAM_ERROR;
