@@ -616,8 +616,7 @@ static json_t *json_wrap_api_reply(const struct cmd *cmd, const redisReply *r) {
 	return jroot;
 }
 
-int json_register_parser(const char *buf, size_t len, 
-	const char *format, char *outcmd, size_t outlen) {
+int json_register_parser(const char *buf, size_t len, struct rqparam *r) {
 	int ret = -1;
 	json_t *root;
 	json_error_t error;
@@ -651,20 +650,17 @@ int json_register_parser(const char *buf, size_t len,
 		goto end;
 	}
 	
-	snprintf(outcmd, outlen, 
-			format, 
-			json_string_value(machine),
-			json_string_value(machine),
-			json_string_value(username));
-	ret = 0;
+	r->param.ureg.flag = json_integer_value(flag);
+	r->param.ureg.machine = strdup(json_string_value(machine));
+	r->param.ureg.username = strdup(json_string_value(username));
 
+	ret = 0;
 	json_decref(root);
 end:
 	return ret;
 }
 
-int json_fileset_parser(const char *buf, size_t len, 
-	const char *format, char *outcmd, size_t outlen) {
+int json_fileset_parser(const char *buf, size_t len, struct rqparam *r) {
 	int ret = -1;
 	json_t *root;
 	json_error_t error;
@@ -684,20 +680,65 @@ int json_fileset_parser(const char *buf, size_t len,
 		goto end;
 	}
 	/* HSET filekey:file1uuid file1uuid '{"uuid":"file1","filename":"file1.txt","filepath":"/path/to/file1.txt"}' */
-	snprintf(outcmd, outlen, 
-			format, 
-			json_string_value(uuid),
-			json_string_value(uuid),
-			json_string_output(root, NULL));
-	ret = 0;
+	// snprintf(outcmd, outlen, 
+	// 		format, 
+	// 		json_string_value(uuid),
+	// 		json_string_value(uuid),
+	// 		json_string_output(root, NULL));
 
+	r->param.fset.fileuuid = strdup(json_string_value(uuid));
+	r->param.fset.data = strdup(json_string_output(root, NULL));
+
+	ret = 0;
 	json_decref(root);
 end:
 	return ret;
 }
 
-int json_fileset_machine_parser(const char *buf, size_t len, 
-	const char *format, char *outcmd, size_t outlen) {
+/* Return the UNIX time in microseconds */
+static long long ustime(void) {
+    struct timeval tv;
+    long long ust;
+
+    gettimeofday(&tv, NULL);
+    ust = ((long long)tv.tv_sec)*1000000;
+    ust += tv.tv_usec;
+    return ust;
+}
+
+int json_traceset_parser(const char *buf, size_t len, struct rqparam *r) {
+	int ret = -1;
+	json_t *root;
+	json_error_t error;
+	char buffer[64] = {0};
+
+	(void)len;
+
+	root = json_loads(buf, 0, &error);
+	if(!root) {
+		fprintf(stderr, "Error: %s (line %d)\n", error.text, error.line);
+		goto end;
+	}
+
+	json_t *uuid = json_object_get(root, "uuid");
+	if (!json_is_string(uuid)) {
+		fprintf(stderr, "error: uuid is not a string\n");
+		json_decref(root);
+		goto end;
+	}
+
+	r->param.tset.fileuuid = strdup(json_string_value(uuid));
+	snprintf(buffer, sizeof(buffer), "trace:%lld", ustime());
+	r->param.tset.traceid = strdup(buffer);
+	r->param.tset.data = strdup(json_string_output(root, NULL));
+
+	ret = 0;
+	json_decref(root);
+end:
+	return ret;
+}
+
+int json_fileget_parser(const char *buf, size_t len, struct rqparam *r) {
 	int ret = -1;
 	json_t *root;
 	json_error_t error;
@@ -717,26 +758,15 @@ int json_fileset_machine_parser(const char *buf, size_t len,
 		goto end;
 	}
 
-	json_t *machine = json_object_get(root, "machine");
-	if (!json_is_string(machine)) {
-		fprintf(stderr, "error: machine is not a string\n");
-		json_decref(root);
-		goto end;
-	}
-	/* HSET machine:machineuuid file1uuid '{"uuid":"file1","filename":"file1.txt","filepath":"/path/to/file1.txt"}' */
-	snprintf(outcmd, outlen, 
-			format, 
-			json_string_value(machine),
-			json_string_value(uuid),
-			json_string_output(root, NULL));
-	ret = 0;
+	r->param.fileuuid = strdup(json_string_value(uuid));
 
+	ret = 0;
 	json_decref(root);
 end:
 	return ret;
 }
 
-int json_trace_parser(const char *buf, size_t len, const char *format, char *outcmd, size_t outlen) {
+int json_traceget_parser(const char *buf, size_t len, struct rqparam *r) {
 	int ret = -1;
 	json_t *root;
 	json_error_t error;
@@ -763,19 +793,22 @@ int json_trace_parser(const char *buf, size_t len, const char *format, char *out
 		goto end;
 	}
 
-	snprintf(outcmd, outlen, 
-			format,
-			json_string_value(uuid),
-			json_integer_value(page),
-			20);
-	ret = 0;
+	// snprintf(outcmd, outlen, 
+	// 		format,
+	// 		json_string_value(uuid),
+	// 		json_integer_value(page),
+	// 		20);
 
+	r->param.fpage.uuid = strdup(json_string_value(uuid));
+	r->param.fpage.page = json_integer_value(page);
+
+	ret = 0;
 	json_decref(root);
 end:
 	return ret;
 }
 
-int json_filegetall_parser(const char *buf, size_t len, const char *format, char *outcmd, size_t outlen) {
+int json_filegetall_parser(const char *buf, size_t len, struct rqparam *r) {
 	int ret = -1;
 	json_t *root;
 	json_error_t error;
@@ -802,13 +835,15 @@ int json_filegetall_parser(const char *buf, size_t len, const char *format, char
 		goto end;
 	}
 
-	snprintf(outcmd, outlen, 
-			format,
-			json_string_value(machine),
-			json_integer_value(page),
-			20);
-	ret = 0;
+	// snprintf(outcmd, outlen, 
+	// 		format,
+	// 		json_string_value(machine),
+	// 		json_integer_value(page),
+	// 		20);
+	r->param.fpage.uuid = strdup(json_string_value(machine));
+	r->param.fpage.page = json_integer_value(page);
 
+	ret = 0;
 	json_decref(root);
 end:
 	return ret;
@@ -819,6 +854,9 @@ void json_api_reply(redisAsyncContext *c, void *r, void *privdata) {
 	struct cmd *cmd = privdata;
 	json_t *j;
 	char *jstr;
+
+    printf("Callback: %d %s\n", reply->type, reply->str);
+	fflush(stdout);
 
 	(void)c;
 
@@ -917,6 +955,49 @@ void json_hscan_reply(redisAsyncContext *c, void *r, void *privdata) {
 			json_object_set_new(jroot, "flag", json_null());
 			break;
 	}
+	/* get JSON as string, possibly with JSONP wrapper */
+	jstr = json_string_output(jroot, cmd->jsonp);
+	/* send reply */
+	format_send_reply(cmd, jstr, strlen(jstr), "application/json");
+	/* cleanup */
+	json_decref(jroot);
+	free(jstr);
+}
+
+void json_exec_reply(redisAsyncContext *c, void *r, void *privdata) {
+	redisReply *reply = r;
+	struct cmd *cmd = privdata;
+	char *jstr;
+	json_t *jroot;
+
+	(void)c;
+	/* broken connection */
+	if(cmd == NULL)
+		return;
+	/* broken Redis link */
+	if(reply == NULL) {
+		format_send_error(cmd, 503, "Service Unavailable");
+		return;
+	}
+
+	jroot = json_object();
+
+	if (reply->type == REDIS_REPLY_ARRAY) {
+		for (size_t i = 0; i < reply->elements; i++) {
+            redisReply *element = reply->element[i];
+            if (element->type == REDIS_REPLY_STRING) {
+                printf("Reply %zu: %s\n", i, element->str);
+            } else if (element->type == REDIS_REPLY_INTEGER) {
+                printf("Reply %zu: %lld\n", i, element->integer);
+            } else {
+                printf("Reply %zu: (other type)\n", i);
+            }
+			fflush(stdout);
+        }
+	} else {
+		json_object_set_new(jroot, "flag", json_null());
+	}
+
 	/* get JSON as string, possibly with JSONP wrapper */
 	jstr = json_string_output(jroot, cmd->jsonp);
 	/* send reply */

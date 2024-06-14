@@ -58,15 +58,58 @@ struct subscription {
 	struct cmd *cmd;
 };
 
-typedef int(*jparsefunc)(const char *buf, size_t len, const char *format, char *outcmd, size_t outlen);
+typedef enum {
+	WB_REGISTER,
+	WB_FILESET,
+	WB_FILEGET,
+	WB_FILEGETALL,
+	WB_TRACESET,
+	WB_TRACEGET
+} functype;
+
+struct rqparam {
+	union {
+		/* user register */
+		struct {
+			char *machine;
+			char *username;
+			int flag;
+		} ureg;
+		
+		/* file set */
+		struct {
+			char *fileuuid;
+			char *data;
+		} fset;
+
+		/* trace set */
+		struct {
+			char *fileuuid;
+			char *traceid;
+			char *data;
+		} tset;
+
+		/* file get */
+		char *fileuuid;
+
+		/* file get all */
+		/* trace get */
+		struct {
+			char *uuid;
+			long long page;
+		} fpage;
+	} param;
+};
+
+typedef int(*jparsefunc)(const char *buf, size_t len, struct rqparam *r);
 
 struct apientry {
 	char *uri;                  /* HTTP URI */
-	char *cmdline;				/* command */
+	void *cmdline;				/* command */
 	int count;					/* Number of command parameters */
 	jparsefunc	func;			/* Request parsing function */
 	formatting_fun replyfunc;	/* Request response function */
-	char *method;               /* POST / GET */
+	functype ftype;				/* Interface Type */
 };
 
 struct cmd *
@@ -104,8 +147,8 @@ cmd_is_subscribe(struct cmd *cmd);
 void
 cmd_send(struct cmd *cmd, formatting_fun f_format);
 
-void
-cmd_send_api(struct cmd *cmd, formatting_fun f_format);
+// void
+// cmd_send_format(struct cmd *cmd, formatting_fun f_format);
 
 void
 cmd_setup(struct cmd *cmd, struct http_client *client);

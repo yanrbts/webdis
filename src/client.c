@@ -238,7 +238,6 @@ http_client_new(struct worker *w, int fd, in_addr_t addr) {
 
 void
 http_client_reset(struct http_client *c) {
-
 	int i;
 
 	/* headers */
