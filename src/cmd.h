@@ -79,6 +79,7 @@ struct rqparam {
 		/* file set */
 		struct {
 			char *fileuuid;
+			char *machine;
 			char *data;
 		} fset;
 
@@ -99,6 +100,11 @@ struct rqparam {
 			long long page;
 		} fpage;
 	} param;
+};
+
+struct multicmd {
+	char *cmdline;
+	int count;
 };
 
 typedef int(*jparsefunc)(const char *buf, size_t len, struct rqparam *r);

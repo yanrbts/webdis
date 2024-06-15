@@ -305,14 +305,25 @@ static struct apientry apis[] = {
 	},
 	{	
 		.uri = "fileset",
-		.cmdline = (char *[]) {
-			"MULTI",
-			"HSET filekey:%s %s %s",
-			"HSET machine:%s %s %s",
-			"EXEC",
-			NULL
+		.cmdline = (struct multicmd *[]) {
+			&(struct multicmd){
+				.cmdline = "MULTI",
+				.count = 1
+			},
+			&(struct multicmd){
+				.cmdline = "HSET filekey:%s %s %s",
+				.count = 4
+			},
+			&(struct multicmd){
+				.cmdline = "HSET machine:%s %s %s",
+				.count = 4
+			},
+			&(struct multicmd){
+				.cmdline = "EXEC",
+				.count = 1
+			}
 		},
-		.count = 4,
+		.count = 0,
 		.func = json_fileset_parser,
 		.replyfunc = json_exec_reply,
 		.ftype = WB_FILESET
@@ -428,7 +439,8 @@ exec_cmd(struct worker *w,
 		struct http_client *client,
 		char *cmdline,
 		formatting_fun callback, 
-		int count) {
+		int count,
+		int isfreecmd) {
 	struct cmd *cmd;
 
 	cmd = cmd_new(client, count);
@@ -439,14 +451,7 @@ exec_cmd(struct worker *w,
 	/* add HTTP info */
 	cmd_setup(cmd, client);
 
-	if(cmd_is_subscribe(cmd)) {
-		/* create a new connection to Redis */
-		cmd->ac = (redisAsyncContext*)pool_connect(w->pool, cmd->database, 0);
-
-		/* register with the client, used upon disconnection */
-		client->reused_cmd = cmd;
-		cmd->pub_sub_client = client;
-	} else if(cmd->database != w->s->cfg->database) {
+	if(cmd->database != w->s->cfg->database) {
 		/* create a new connection to Redis for custom DBs */
 		cmd->ac = (redisAsyncContext*)pool_connect(w->pool, cmd->database, 0);
 	} else {
@@ -457,6 +462,8 @@ exec_cmd(struct worker *w,
 	/* send it off! */
 	if(cmd->ac) {
 		cmd_send(cmd, callback);
+		if (isfreecmd)
+			cmd_free(cmd);
 		return 0;
 	}
 	/* failed to find a suitable connection to Redis. */
@@ -465,16 +472,75 @@ exec_cmd(struct worker *w,
 }
 
 static cmd_response_t 
-single_cmd_run(struct worker *w, 
+multi_cmd_run(struct worker *w, 
 			  struct http_client *client, 
 			  struct apientry *api, 
 			  const char *body,
 			  size_t body_len) {
 	struct rqparam r;
-	// struct cmd *cmd;
+	struct multicmd **cmds;
 	char buffer[1024] = {0};
 
+	memset(&r, 0, sizeof(struct rqparam));
 	api->func(body, body_len, &r);
+
+	cmds = (struct multicmd**)api->cmdline;
+
+	snprintf(buffer, sizeof(buffer), "%s", cmds[0]->cmdline);
+	if(exec_cmd(w, client, buffer, NULL, cmds[0]->count, 1) == -1)
+		goto end;
+
+	/* HSET filekey:%s %s %s */
+	memset(buffer, 0, sizeof(buffer));
+	snprintf(buffer, sizeof(buffer), 
+			cmds[1]->cmdline,
+			r.param.fset.fileuuid,
+			r.param.fset.fileuuid,
+			r.param.fset.data);
+	if (exec_cmd(w, client, buffer, NULL, cmds[1]->count, 1) == -1)
+		goto end;
+
+	/* HSET machine:%s %s %s */
+	memset(buffer, 0, sizeof(buffer));
+	snprintf(buffer, sizeof(buffer), 
+			cmds[2]->cmdline,
+			r.param.fset.machine,
+			r.param.fset.fileuuid,
+			r.param.fset.data);
+	if(exec_cmd(w, client, buffer, NULL, cmds[2]->count, 1) == -1)
+		goto end;
+
+	/* EXEC */
+	memset(buffer, 0, sizeof(buffer));
+	snprintf(buffer, sizeof(buffer), 
+			"%s",
+			cmds[3]->cmdline);
+	if (exec_cmd(w, client, buffer, api->replyfunc, cmds[3]->count, 0) == 0) {
+		free(r.param.fset.fileuuid);
+		free(r.param.fset.machine);
+		free(r.param.fset.data);
+		return CMD_SENT;
+	}
+end:
+	free(r.param.fset.fileuuid);
+	free(r.param.fset.machine);
+	free(r.param.fset.data);
+
+	client->reused_cmd = NULL;
+	return CMD_REDIS_UNAVAIL;
+}
+
+static cmd_response_t 
+start_cmd_run(struct worker *w, 
+			  struct http_client *client, 
+			  struct apientry *api, 
+			  const char *body,
+			  size_t body_len) {
+	struct rqparam r;
+	char buffer[1024] = {0};
+
+	if (api->ftype != WB_FILESET)
+		api->func(body, body_len, &r);
 
 	switch (api->ftype) {
 	case WB_REGISTER:
@@ -487,7 +553,7 @@ single_cmd_run(struct worker *w,
 		free(r.param.ureg.username);
 		break;
 	case WB_FILESET:
-		break;
+		return multi_cmd_run(w, client, api, body, body_len);
 	case WB_FILEGET:
 		snprintf(buffer, sizeof(buffer), 
 				api->cmdline,
@@ -518,70 +584,13 @@ single_cmd_run(struct worker *w,
 		goto end;
 	}
 
-	if (exec_cmd(w, client, buffer, api->replyfunc, api->count) == 0)
+	if (exec_cmd(w, client, buffer, api->replyfunc, api->count, 0) == 0)
 		return CMD_SENT;
 end:
 	client->reused_cmd = NULL;
 	return CMD_REDIS_UNAVAIL;
-
-
-// 	cmd = cmd_new(client, api->count);
-// 	cmd->fd = client->fd;
-// 	cmd->database = w->s->cfg->database;
-// 	/* Truncate the command into a command array based on spaces */
-// 	splitargv(buffer, cmd);
-
-// 	/* add HTTP info */
-// 	cmd_setup(cmd, client);
-
-// 	if(cmd_is_subscribe(cmd)) {
-// 		/* create a new connection to Redis */
-// 		cmd->ac = (redisAsyncContext*)pool_connect(w->pool, cmd->database, 0);
-
-// 		/* register with the client, used upon disconnection */
-// 		client->reused_cmd = cmd;
-// 		cmd->pub_sub_client = client;
-// 	} else if(cmd->database != w->s->cfg->database) {
-// 		/* create a new connection to Redis for custom DBs */
-// 		cmd->ac = (redisAsyncContext*)pool_connect(w->pool, cmd->database, 0);
-// 	} else {
-// 		/* get a connection from the pool */
-// 		cmd->ac = (redisAsyncContext*)pool_get_context(w->pool);
-// 	}
-
-// 	/* send it off! */
-// 	if(cmd->ac) {
-// 		cmd_send(cmd, api->replyfunc);
-// 		return CMD_SENT;
-// 	}
-// 	/* failed to find a suitable connection to Redis. */
-// 	cmd_free(cmd);
-// end:
-// 	client->reused_cmd = NULL;
-// 	return CMD_REDIS_UNAVAIL;
 }
 
-static cmd_response_t 
-multi_cmd_run(struct worker *w, 
-			  struct http_client *client, 
-			  struct apientry *api, 
-			  const char *body,
-			  size_t body_len) {
-	int i = 0;
-	struct rqparam r;
-	char **cmds;
-	// struct cmd *cmd;
-	char buffer[1024] = {0};
-
-	api->func(body, body_len, &r);
-
-	cmds = (char**)api->cmdline;
-
-	while (cmds[i] != NULL)
-		i++;
-	snprintf(buffer, sizeof(buffer), "%s", cmds[0]);
-	exec_cmd(w, client, buffer, NULL, 4);
-}
 
 cmd_response_t
 cmd_run_api(struct worker *w, 
@@ -599,16 +608,19 @@ cmd_run_api(struct worker *w,
 	api = getApiFunc(uri);
 	if (api == NULL)
 		return CMD_PARAM_ERROR;
-	
-	if (api->ftype != WB_FILESET) {
-		return single_cmd_run(w, client, api, body, body_len);
-	} else {
-		return CMD_PARAM_ERROR;
-	}
+
+	return start_cmd_run(w, client, api, body, body_len);
 }
 
 void
 cmd_send(struct cmd *cmd, formatting_fun f_format) {
+	// printf("{");
+	// for (int i = 0; i < cmd->count; i++) {
+	// 	printf("%s,", cmd->argv[i]);
+	// }
+	// printf("}\n");
+	// fflush(stdout);
+
 	redisAsyncCommandArgv(cmd->ac, f_format, cmd, cmd->count,
 		(const char **)cmd->argv, cmd->argv_len);
 }

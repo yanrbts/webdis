@@ -662,6 +662,7 @@ end:
 
 int json_fileset_parser(const char *buf, size_t len, struct rqparam *r) {
 	int ret = -1;
+	char *tmp;
 	json_t *root;
 	json_error_t error;
 
@@ -679,19 +680,27 @@ int json_fileset_parser(const char *buf, size_t len, struct rqparam *r) {
 		json_decref(root);
 		goto end;
 	}
-	/* HSET filekey:file1uuid file1uuid '{"uuid":"file1","filename":"file1.txt","filepath":"/path/to/file1.txt"}' */
-	// snprintf(outcmd, outlen, 
-	// 		format, 
-	// 		json_string_value(uuid),
-	// 		json_string_value(uuid),
-	// 		json_string_output(root, NULL));
+
+	json_t *machine = json_object_get(root, "machine");
+	if (!json_is_string(machine)) {
+		fprintf(stderr, "error: uuid is not a string\n");
+		json_decref(root);
+		goto end;
+	}
+
+	/* HSET filekey:fileuuid fileuuid '{"machine":"123456", "uuid":"file1","filename":"file1.txt","filepath":"/path/to/file1.txt"}' */
+	/* HSET machine:machine fileuuid '{"machine":"123456","uuid":"file1","filename":"file1.txt","filepath":"/path/to/file1.txt"}' */
 
 	r->param.fset.fileuuid = strdup(json_string_value(uuid));
-	r->param.fset.data = strdup(json_string_output(root, NULL));
+	r->param.fset.machine = strdup(json_string_value(machine));
+
+	tmp = json_string_output(root, NULL);
+	r->param.fset.data = strdup(tmp);
+	free(tmp);
 
 	ret = 0;
-	json_decref(root);
 end:
+	if (root) json_decref(root);
 	return ret;
 }
 
@@ -982,22 +991,22 @@ void json_exec_reply(redisAsyncContext *c, void *r, void *privdata) {
 
 	jroot = json_object();
 
-	if (reply->type == REDIS_REPLY_ARRAY) {
-		for (size_t i = 0; i < reply->elements; i++) {
-            redisReply *element = reply->element[i];
-            if (element->type == REDIS_REPLY_STRING) {
-                printf("Reply %zu: %s\n", i, element->str);
-            } else if (element->type == REDIS_REPLY_INTEGER) {
-                printf("Reply %zu: %lld\n", i, element->integer);
-            } else {
-                printf("Reply %zu: (other type)\n", i);
-            }
-			fflush(stdout);
-        }
-	} else {
-		json_object_set_new(jroot, "flag", json_null());
-	}
-
+	// if (reply->type == REDIS_REPLY_ARRAY) {
+	// 	for (size_t i = 0; i < reply->elements; i++) {
+    //         redisReply *element = reply->element[i];
+    //         if (element->type == REDIS_REPLY_STRING) {
+    //             printf("Reply %zu: %s\n", i, element->str);
+    //         } else if (element->type == REDIS_REPLY_INTEGER) {
+    //             printf("Reply %zu: %lld\n", i, element->integer);
+    //         } else {
+    //             printf("Reply %zu: (other type)\n", i);
+    //         }
+	// 		fflush(stdout);
+    //     }
+	// } else {
+	// 	json_object_set_new(jroot, "flag", json_null());
+	// }
+	json_object_set_new(jroot, "flag", json_null());
 	/* get JSON as string, possibly with JSONP wrapper */
 	jstr = json_string_output(jroot, cmd->jsonp);
 	/* send reply */
