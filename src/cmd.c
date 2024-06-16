@@ -519,7 +519,7 @@ start_cmd_run(struct worker *w,
 		/* If exec_cmd returns -1, it means failure. At this time, the cmd variable 
 		 * has been released. The r variable has also been released. Therefore, 
 		 * r is only released when exec_cmd succeeds.*/
-		if(exec_cmd(w, client, buffer, multiCallback, api->count, r) == -1)
+		if(exec_cmd(w, client, buffer, api->replyfunc, api->count, r) == -1)
 			goto end;
 		return CMD_SENT;
 	case WB_FILEGET:
