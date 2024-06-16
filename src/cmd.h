@@ -12,6 +12,7 @@ struct http_client;
 struct server;
 struct worker;
 struct cmd;
+struct rqparam;
 
 typedef void (*formatting_fun)(redisAsyncContext *, void *, void *);
 typedef char* (*ws_error_fun)(int http_status, const char *msg, size_t msg_sz, size_t *out_sz);
@@ -29,6 +30,7 @@ struct cmd {
 	int count;
 	char **argv;
 	size_t *argv_len;
+	struct rqparam *rparam;
 
 	/* HTTP data */
 	char *mime; /* forced output content-type */
@@ -68,6 +70,7 @@ typedef enum {
 } functype;
 
 struct rqparam {
+	functype ftype;
 	union {
 		/* user register */
 		struct {
@@ -126,6 +129,9 @@ cmd_free_argv(struct cmd *c);
 
 void
 cmd_free(struct cmd *c);
+
+void 
+rqparam_free(struct rqparam *r);
 
 cmd_response_t
 cmd_run(struct worker *w, struct http_client *client,

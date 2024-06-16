@@ -30,6 +30,8 @@ int json_traceget_parser(const char *buf, size_t len, struct rqparam *r);
 int json_filegetall_parser(const char *buf, size_t len, struct rqparam *r);
 
 void json_hscan_reply(redisAsyncContext *c, void *r, void *privdata);
+void json_hset_reply(redisAsyncContext *c, void *r, void *privdata);
+void json_multi_reply(redisAsyncContext *c, void *r, void *privdata);
 void json_exec_reply(redisAsyncContext *c, void *r, void *privdata);
 void json_api_reply(redisAsyncContext *c, void *r, void *privdata);
 

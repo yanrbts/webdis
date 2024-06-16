@@ -36,6 +36,7 @@ cmd_new(struct http_client *client, int count) {
 	
 	c->argv = calloc(count, sizeof(char*));
 	c->argv_len = calloc(count, sizeof(size_t));
+	c->rparam = NULL;
 
 	return c;
 }
@@ -70,8 +71,42 @@ cmd_free(struct cmd *c) {
 		|| cmd_is_subscribe(c))) {
 		pool_free_context(c->ac);
 	}
+	rqparam_free(c->rparam);
 	cmd_free_argv(c);
 	free(c);
+}
+
+void 
+rqparam_free(struct rqparam *r) {
+	if (r == NULL)
+		return;
+
+	switch (r->ftype) {
+	case WB_REGISTER:
+		free(r->param.ureg.machine);
+		free(r->param.ureg.username);
+		break;
+	case WB_FILESET:
+		free(r->param.fset.machine);
+		free(r->param.fset.fileuuid);
+		free(r->param.fset.data);
+		break;
+	case WB_FILEGET:
+		free(r->param.fileuuid);
+		break;
+	case WB_TRACESET:
+		free(r->param.tset.fileuuid);
+		free(r->param.tset.traceid);
+		free(r->param.tset.data);
+		break;
+	case WB_FILEGETALL:
+	case WB_TRACEGET:
+		free(r->param.fpage.uuid);
+		break;
+	default:
+		break;
+	}
+	free(r);
 }
 
 /* taken from libevent */
@@ -305,27 +340,10 @@ static struct apientry apis[] = {
 	},
 	{	
 		.uri = "fileset",
-		.cmdline = (struct multicmd *[]) {
-			&(struct multicmd){
-				.cmdline = "MULTI",
-				.count = 1
-			},
-			&(struct multicmd){
-				.cmdline = "HSET filekey:%s %s %s",
-				.count = 4
-			},
-			&(struct multicmd){
-				.cmdline = "HSET machine:%s %s %s",
-				.count = 4
-			},
-			&(struct multicmd){
-				.cmdline = "EXEC",
-				.count = 1
-			}
-		},
-		.count = 0,
+		.cmdline = "MULTI",
+		.count = 1,
 		.func = json_fileset_parser,
-		.replyfunc = json_exec_reply,
+		.replyfunc = json_multi_reply,
 		.ftype = WB_FILESET
 	},
 	{
@@ -440,12 +458,13 @@ exec_cmd(struct worker *w,
 		char *cmdline,
 		formatting_fun callback, 
 		int count,
-		int isfreecmd) {
+		struct rqparam *r) {
 	struct cmd *cmd;
 
 	cmd = cmd_new(client, count);
 	cmd->fd = client->fd;
 	cmd->database = w->s->cfg->database;
+	cmd->rparam = r;
 	/* Truncate the command into a command array based on spaces */
 	splitargv(cmdline, cmd);
 	/* add HTTP info */
@@ -462,7 +481,11 @@ exec_cmd(struct worker *w,
 	/* send it off! */
 	if(cmd->ac) {
 		cmd_send(cmd, callback);
-		if (isfreecmd)
+		/* If you do not set an asynchronous callback function, 
+		 * you must release the cmd variable, otherwise a memory 
+		 * leak will occur. If you set a callback, cmd will be 
+		 * released in the callback function.*/
+		if (callback == NULL)
 			cmd_free(cmd);
 		return 0;
 	}
@@ -472,119 +495,60 @@ exec_cmd(struct worker *w,
 }
 
 static cmd_response_t 
-multi_cmd_run(struct worker *w, 
-			  struct http_client *client, 
-			  struct apientry *api, 
-			  const char *body,
-			  size_t body_len) {
-	struct rqparam r;
-	struct multicmd **cmds;
-	char buffer[1024] = {0};
-
-	memset(&r, 0, sizeof(struct rqparam));
-	api->func(body, body_len, &r);
-
-	cmds = (struct multicmd**)api->cmdline;
-
-	snprintf(buffer, sizeof(buffer), "%s", cmds[0]->cmdline);
-	if(exec_cmd(w, client, buffer, NULL, cmds[0]->count, 1) == -1)
-		goto end;
-
-	/* HSET filekey:%s %s %s */
-	memset(buffer, 0, sizeof(buffer));
-	snprintf(buffer, sizeof(buffer), 
-			cmds[1]->cmdline,
-			r.param.fset.fileuuid,
-			r.param.fset.fileuuid,
-			r.param.fset.data);
-	if (exec_cmd(w, client, buffer, NULL, cmds[1]->count, 1) == -1)
-		goto end;
-
-	/* HSET machine:%s %s %s */
-	memset(buffer, 0, sizeof(buffer));
-	snprintf(buffer, sizeof(buffer), 
-			cmds[2]->cmdline,
-			r.param.fset.machine,
-			r.param.fset.fileuuid,
-			r.param.fset.data);
-	if(exec_cmd(w, client, buffer, NULL, cmds[2]->count, 1) == -1)
-		goto end;
-
-	/* EXEC */
-	memset(buffer, 0, sizeof(buffer));
-	snprintf(buffer, sizeof(buffer), 
-			"%s",
-			cmds[3]->cmdline);
-	if (exec_cmd(w, client, buffer, api->replyfunc, cmds[3]->count, 0) == 0) {
-		free(r.param.fset.fileuuid);
-		free(r.param.fset.machine);
-		free(r.param.fset.data);
-		return CMD_SENT;
-	}
-end:
-	free(r.param.fset.fileuuid);
-	free(r.param.fset.machine);
-	free(r.param.fset.data);
-
-	client->reused_cmd = NULL;
-	return CMD_REDIS_UNAVAIL;
-}
-
-static cmd_response_t 
 start_cmd_run(struct worker *w, 
 			  struct http_client *client, 
 			  struct apientry *api, 
 			  const char *body,
 			  size_t body_len) {
-	struct rqparam r;
+	struct rqparam *r;
 	char buffer[1024] = {0};
 
-	if (api->ftype != WB_FILESET)
-		api->func(body, body_len, &r);
+	r = calloc(1, sizeof(struct rqparam));
+	api->func(body, body_len, r);
 
 	switch (api->ftype) {
 	case WB_REGISTER:
 		snprintf(buffer, sizeof(buffer), 
 				api->cmdline,
-				r.param.ureg.machine,
-				r.param.ureg.machine,
-				r.param.ureg.username);
-		free(r.param.ureg.machine);
-		free(r.param.ureg.username);
+				r->param.ureg.machine,
+				r->param.ureg.machine,
+				r->param.ureg.username);
 		break;
 	case WB_FILESET:
-		return multi_cmd_run(w, client, api, body, body_len);
+		snprintf(buffer, sizeof(buffer), "%s", (char*)api->cmdline);
+		/* If exec_cmd returns -1, it means failure. At this time, the cmd variable 
+		 * has been released. The r variable has also been released. Therefore, 
+		 * r is only released when exec_cmd succeeds.*/
+		if(exec_cmd(w, client, buffer, multiCallback, api->count, r) == -1)
+			goto end;
+		return CMD_SENT;
 	case WB_FILEGET:
 		snprintf(buffer, sizeof(buffer), 
 				api->cmdline,
-				r.param.fileuuid,
-				r.param.fileuuid);
-		free(r.param.fileuuid);
+				r->param.fileuuid,
+				r->param.fileuuid);
 		break;
 	case WB_TRACEGET:
 	case WB_FILEGETALL:
 		snprintf(buffer, sizeof(buffer), 
 				api->cmdline,
-				r.param.fpage.uuid,
-				r.param.fpage.page,
+				r->param.fpage.uuid,
+				r->param.fpage.page,
 				20);
-		free(r.param.fpage.uuid);
 		break;
 	case WB_TRACESET:
 		snprintf(buffer, sizeof(buffer), 
 				api->cmdline,
-				r.param.tset.fileuuid,
-				r.param.tset.traceid,
-				r.param.tset.data);
-		free(r.param.tset.fileuuid);
-		free(r.param.tset.traceid);
-		free(r.param.tset.data);
+				r->param.tset.fileuuid,
+				r->param.tset.traceid,
+				r->param.tset.data);
 		break;
 	default:
 		goto end;
 	}
 
-	if (exec_cmd(w, client, buffer, api->replyfunc, api->count, 0) == 0)
+	rqparam_free(r);
+	if (exec_cmd(w, client, buffer, api->replyfunc, api->count, NULL) == 0)
 		return CMD_SENT;
 end:
 	client->reused_cmd = NULL;
@@ -616,19 +580,14 @@ void
 cmd_send(struct cmd *cmd, formatting_fun f_format) {
 	// printf("{");
 	// for (int i = 0; i < cmd->count; i++) {
-	// 	printf("%s,", cmd->argv[i]);
+	// 	printf("%s ", cmd->argv[i]);
 	// }
 	// printf("}\n");
 	// fflush(stdout);
 
-	redisAsyncCommandArgv(cmd->ac, f_format, cmd, cmd->count,
+	redisAsyncCommandArgv(cmd->ac, f_format, f_format == NULL ? NULL : cmd, cmd->count,
 		(const char **)cmd->argv, cmd->argv_len);
 }
-
-// void
-// cmd_send_format(struct cmd *cmd, formatting_fun f_format) {
-// 	// redisAsyncFormattedCommand(cmd->ac, f_format, cmd, cmd->cmdstr, strlen(cmd->cmdstr));
-// }
 
 void
 cmd_send_expand(struct cmd *cmd, formatting_fun f_format) {

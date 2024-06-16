@@ -598,7 +598,6 @@ static json_t *json_wrap_api_reply(const struct cmd *cmd, const redisReply *r) {
 		case REDIS_REPLY_INTEGER:
 			json_object_set_new(jroot, verb, json_integer(r->integer));
 			break;
-
 		case REDIS_REPLY_ARRAY:
 			if(!(jlist = json_expand_array(r))) {
 				jlist = json_null();
@@ -650,6 +649,7 @@ int json_register_parser(const char *buf, size_t len, struct rqparam *r) {
 		goto end;
 	}
 	
+	r->ftype = WB_REGISTER;
 	r->param.ureg.flag = json_integer_value(flag);
 	r->param.ureg.machine = strdup(json_string_value(machine));
 	r->param.ureg.username = strdup(json_string_value(username));
@@ -691,6 +691,7 @@ int json_fileset_parser(const char *buf, size_t len, struct rqparam *r) {
 	/* HSET filekey:fileuuid fileuuid '{"machine":"123456", "uuid":"file1","filename":"file1.txt","filepath":"/path/to/file1.txt"}' */
 	/* HSET machine:machine fileuuid '{"machine":"123456","uuid":"file1","filename":"file1.txt","filepath":"/path/to/file1.txt"}' */
 
+	r->ftype = WB_FILESET;
 	r->param.fset.fileuuid = strdup(json_string_value(uuid));
 	r->param.fset.machine = strdup(json_string_value(machine));
 
@@ -736,6 +737,7 @@ int json_traceset_parser(const char *buf, size_t len, struct rqparam *r) {
 		goto end;
 	}
 
+	r->ftype = WB_TRACESET;
 	r->param.tset.fileuuid = strdup(json_string_value(uuid));
 	snprintf(buffer, sizeof(buffer), "trace:%lld", ustime());
 	r->param.tset.traceid = strdup(buffer);
@@ -767,6 +769,7 @@ int json_fileget_parser(const char *buf, size_t len, struct rqparam *r) {
 		goto end;
 	}
 
+	r->ftype = WB_FILEGET;
 	r->param.fileuuid = strdup(json_string_value(uuid));
 
 	ret = 0;
@@ -802,12 +805,7 @@ int json_traceget_parser(const char *buf, size_t len, struct rqparam *r) {
 		goto end;
 	}
 
-	// snprintf(outcmd, outlen, 
-	// 		format,
-	// 		json_string_value(uuid),
-	// 		json_integer_value(page),
-	// 		20);
-
+	r->ftype = WB_TRACEGET;
 	r->param.fpage.uuid = strdup(json_string_value(uuid));
 	r->param.fpage.page = json_integer_value(page);
 
@@ -844,11 +842,7 @@ int json_filegetall_parser(const char *buf, size_t len, struct rqparam *r) {
 		goto end;
 	}
 
-	// snprintf(outcmd, outlen, 
-	// 		format,
-	// 		json_string_value(machine),
-	// 		json_integer_value(page),
-	// 		20);
+	r->ftype = WB_FILEGETALL;
 	r->param.fpage.uuid = strdup(json_string_value(machine));
 	r->param.fpage.page = json_integer_value(page);
 
@@ -864,11 +858,7 @@ void json_api_reply(redisAsyncContext *c, void *r, void *privdata) {
 	json_t *j;
 	char *jstr;
 
-    printf("Callback: %d %s\n", reply->type, reply->str);
-	fflush(stdout);
-
 	(void)c;
-
 	/* broken connection */
 	if(cmd == NULL) {
 		return;
@@ -973,7 +963,42 @@ void json_hscan_reply(redisAsyncContext *c, void *r, void *privdata) {
 	free(jstr);
 }
 
+void setCallback(redisAsyncContext *c, void *r, void *privdata) {
+	(void)c;
+	(void)privdata;
+
+    redisReply *reply = (redisReply *)r;
+    if (reply == NULL) return;
+
+    if (reply->type == REDIS_REPLY_ERROR) {
+        printf("Error: %s\n", reply->str);
+    }
+}
+
+void json_multi_reply(redisAsyncContext *c, void *r, void *privdata) {
+    redisReply *reply = (redisReply *)r;
+	struct cmd *cmd = privdata;
+
+    if (reply == NULL) 
+		return;
+
+	redisAsyncCommand(c, setCallback, NULL, 
+					"HSET filekey:%s %s %s", 
+					cmd->rparam->param.fset.fileuuid,
+					cmd->rparam->param.fset.fileuuid,
+					cmd->rparam->param.fset.data);
+	
+	redisAsyncCommand(c, setCallback, NULL, 
+					"HSET machine:%s %s %s", 
+					cmd->rparam->param.fset.machine,
+					cmd->rparam->param.fset.fileuuid,
+					cmd->rparam->param.fset.data);
+	
+	redisAsyncCommand(c, json_exec_reply, cmd, "%s", "EXEC");
+}
+
 void json_exec_reply(redisAsyncContext *c, void *r, void *privdata) {
+	int number = 0;
 	redisReply *reply = r;
 	struct cmd *cmd = privdata;
 	char *jstr;
@@ -991,22 +1016,32 @@ void json_exec_reply(redisAsyncContext *c, void *r, void *privdata) {
 
 	jroot = json_object();
 
-	// if (reply->type == REDIS_REPLY_ARRAY) {
-	// 	for (size_t i = 0; i < reply->elements; i++) {
-    //         redisReply *element = reply->element[i];
-    //         if (element->type == REDIS_REPLY_STRING) {
-    //             printf("Reply %zu: %s\n", i, element->str);
-    //         } else if (element->type == REDIS_REPLY_INTEGER) {
-    //             printf("Reply %zu: %lld\n", i, element->integer);
-    //         } else {
-    //             printf("Reply %zu: (other type)\n", i);
-    //         }
-	// 		fflush(stdout);
-    //     }
-	// } else {
-	// 	json_object_set_new(jroot, "flag", json_null());
-	// }
-	json_object_set_new(jroot, "flag", json_null());
+	if (reply->type == REDIS_REPLY_ERROR) {
+		json_object_set_new(jroot, "flag", json_string("FAIL"));
+	} else if (reply->type == REDIS_REPLY_ARRAY) {
+		for (size_t i = 0; i < reply->elements; i++) {
+            redisReply *element = reply->element[i];
+
+			switch (element->type) {
+			case REDIS_REPLY_INTEGER:
+				number++;
+				break;
+			case REDIS_REPLY_STRING:
+			case REDIS_REPLY_STATUS:
+			case REDIS_REPLY_ERROR:
+			default:
+				break;
+			}
+        }
+		/* Here we need to determine whether all commands in the transaction 
+		 * are executed successfully. Currently, there are two commands in the transaction.*/
+		if (number == 2)
+			json_object_set_new(jroot, "flag", json_string("OK"));
+		else
+			json_object_set_new(jroot, "flag", json_string("FAIL"));
+	} else {
+		json_object_set_new(jroot, "flag", json_null());
+	}
 	/* get JSON as string, possibly with JSONP wrapper */
 	jstr = json_string_output(jroot, cmd->jsonp);
 	/* send reply */
