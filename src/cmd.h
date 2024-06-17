@@ -75,7 +75,7 @@ struct rqparam {
 		/* user register */
 		struct {
 			char *machine;
-			char *username;
+			char *data;
 			int flag;
 		} ureg;
 		

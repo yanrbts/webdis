@@ -84,7 +84,7 @@ rqparam_free(struct rqparam *r) {
 	switch (r->ftype) {
 	case WB_REGISTER:
 		free(r->param.ureg.machine);
-		free(r->param.ureg.username);
+		free(r->param.ureg.data);
 		break;
 	case WB_FILESET:
 		free(r->param.fset.machine);
@@ -332,10 +332,10 @@ cmd_run(struct worker *w, struct http_client *client,
 static struct apientry apis[] = {
 	{	
 		.uri = "register",
-		.cmdline = "HMSET userkey:%s uuid %s username %s",
-		.count = 6,
+		.cmdline = "HSET userkey:%s %s %s",
+		.count = 4,
 		.func = json_register_parser,
-		.replyfunc = json_api_reply,
+		.replyfunc = json_register_reply,
 		.ftype = WB_REGISTER
 	},
 	{	
@@ -351,7 +351,7 @@ static struct apientry apis[] = {
 		.cmdline = "HSET filekey:%s %s %s",
 		.count = 4,
 		.func = json_traceset_parser,
-		.replyfunc = json_api_reply,
+		.replyfunc = json_hgetorset_reply,
 		.ftype = WB_TRACESET
 	},
 	{
@@ -359,7 +359,7 @@ static struct apientry apis[] = {
 		.cmdline = "HGET filekey:%s %s",
 		.count = 3,
 		.func = json_fileget_parser,
-		.replyfunc = json_api_reply,
+		.replyfunc = json_hgetorset_reply,
 		.ftype = WB_FILEGET
 	},
 	{
@@ -508,18 +508,35 @@ start_cmd_run(struct worker *w,
 
 	switch (api->ftype) {
 	case WB_REGISTER:
-		snprintf(buffer, sizeof(buffer), 
-				api->cmdline,
-				r->param.ureg.machine,
-				r->param.ureg.machine,
-				r->param.ureg.username);
-		break;
+		/* Login logic 1. First determine whether the flag is 1. 
+		 * If flag=1, insert new user information directly. 
+		 * 
+		 * If flag=0, first check whether the user information exists. 
+		 * If it exists, it will be directly returned to the client. 
+		 * If it does not exist, insert it and send it to the client. user information*/
+		if (r->param.ureg.flag == 1) {
+			snprintf(buffer, sizeof(buffer), 
+					api->cmdline,
+					r->param.ureg.machine,
+					r->param.ureg.machine,
+					r->param.ureg.data);
+		} else {
+			snprintf(buffer, sizeof(buffer),
+					"HGET userkey:%s %s",
+					r->param.ureg.machine,
+					r->param.ureg.machine);
+			api->count = 3;
+		}
+		
+		if(exec_cmd(w, client, buffer, api->replyfunc, api->count, r) == -1)
+			goto end;
+		return CMD_SENT;
 	case WB_FILESET:
 		snprintf(buffer, sizeof(buffer), "%s", (char*)api->cmdline);
 		/* If exec_cmd returns -1, it means failure. At this time, the cmd variable 
 		 * has been released. The r variable has also been released. Therefore, 
 		 * r is only released when exec_cmd succeeds.*/
-		if(exec_cmd(w, client, buffer, multiCallback, api->count, r) == -1)
+		if(exec_cmd(w, client, buffer, api->replyfunc, api->count, r) == -1)
 			goto end;
 		return CMD_SENT;
 	case WB_FILEGET:
@@ -587,22 +604,6 @@ cmd_send(struct cmd *cmd, formatting_fun f_format) {
 
 	redisAsyncCommandArgv(cmd->ac, f_format, f_format == NULL ? NULL : cmd, cmd->count,
 		(const char **)cmd->argv, cmd->argv_len);
-}
-
-void
-cmd_send_expand(struct cmd *cmd, formatting_fun f_format) {
-	// Start a transaction
-	const char *multi_cmd[] = {"MULTI"};
-	redisAsyncCommandArgv((redisAsyncContext *)cmd->ac, NULL, NULL, 1, multi_cmd, NULL);
-
-	const char *set_cmd1[] = {"SET", "key10", "value10"};
-    redisAsyncCommandArgv((redisAsyncContext *)cmd->ac, NULL, NULL, 3, set_cmd1, NULL);
-	redisAsyncCommandArgv(cmd->ac, NULL, cmd, cmd->count,
-		(const char **)cmd->argv, cmd->argv_len);
-
-	// Execute the transaction
-	const char *exec_cmd[] = {"EXEC"};
-	redisAsyncCommandArgv((redisAsyncContext *)cmd->ac, f_format, NULL, 1, exec_cmd, NULL);
 }
 
 /**
