@@ -18,12 +18,18 @@
 #include <sys/ioctl.h>
 #include <limits.h>
 
+char *ascii_logo ="\n" 
+"    __                                      | Version: %s\n"                       
+"   / /__________  ______   _____  _____     | Port: %d \n"
+"  / //_/ ___/ _ \\/ ___/ | / / _ \\/ ___/     | PID: %ld\n"
+" / ,< (__  )  __/ /   | |/ /  __/ /         | Author: Yanruibing\n"   
+"/_/|_/____/\\___/_/    |___/\\___/_/          | Web: http://www.kxyk.com \n\n";
+
 /**
  * Sets up a non-blocking socket
  */
 static int
 socket_setup(struct server *s, const char *ip, int port) {
-
 	int reuse = 1;
 	struct sockaddr_in addr;
 	socklen_t len = sizeof(addr);
@@ -216,7 +222,7 @@ server_daemonize(struct server *s, const char *pidfile) {
 	}
 
 	/* write pidfile */
-	if(pidfile) {
+	if (pidfile) {
 		int pid_fd = open(pidfile, O_WRONLY | O_CREAT | O_TRUNC, 0600);
 		if(pid_fd > 0) {
 			char pid_buffer[(CHAR_BIT * sizeof(int) / 3) + 3]; /* max length for int */
@@ -322,6 +328,8 @@ server_start(struct server *s) {
 		return -1;
 	}
 
+	/* print logo */
+	printf(ascii_logo, WEBDIS_VERSION, s->cfg->http_port, getpid());
 	/* initialize fsync timer once libevent is set up */
 	slog_fsync_init(s);
 

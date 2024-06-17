@@ -42,8 +42,11 @@ slog_init(struct server *s) {
 
 		fprintf(stderr, "Could not open %s: %s\n", s->cfg->logfile,
 				strerror(errno));
+	} else if (s->cfg->daemonize) {
+
+	} else {
+		s->log.fd = 2; /* stderr */
 	}
-	s->log.fd = 2; /* stderr */
 }
 
 static void

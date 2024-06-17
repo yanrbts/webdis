@@ -4,7 +4,6 @@
 
 int
 main(int argc, char *argv[]) {
-
 	struct server *s;
 
 	if(argc > 1) {
