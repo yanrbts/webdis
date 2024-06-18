@@ -101,6 +101,7 @@ slog_internal(struct server *s, log_level level,
 		const char *body, size_t sz) {
 
 	const char *c = "EWNIDT";
+	const char *cf = "!.-*#>";
 	time_t now;
 	struct tm now_tm, *lt_ret;
 	struct timeval tv;
@@ -133,7 +134,7 @@ slog_internal(struct server *s, log_level level,
 	/* generate output line. */
 	char letter = (level == WEBDIS_TRACE ? c[5] : c[level]);
 	line_sz = snprintf(line, sizeof(line),
-		"[%d] %c %s %s\n", (int)s->log.self, letter, time_buf, msg);
+		"[%d] %c %s %c %s\n", (int)s->log.self, letter, time_buf, cf[level], msg);
 
 	/* write to log and maybe flush to disk. */
 	ret = write(s->log.fd, line, line_sz);
