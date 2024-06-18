@@ -291,7 +291,7 @@ server_start(struct server *s) {
 
 		/* sometimes event mech gets lost on fork */
 		if(event_reinit(s->base) != 0) {
-			fprintf(stderr, "Error: event_reinit failed after fork");
+			slog(s, WEBDIS_ERROR, "Error: event_reinit failed after fork", 0);
 		}
 	}
 
@@ -329,7 +329,8 @@ server_start(struct server *s) {
 	}
 
 	/* print logo */
-	printf(ascii_logo, WEBDIS_VERSION, s->cfg->http_port, getpid());
+	// printf(ascii_logo, WEBDIS_VERSION, s->cfg->http_port, getpid());
+	dprintf(s->log.fd, ascii_logo, WEBDIS_VERSION, s->cfg->http_port, getpid());
 	/* initialize fsync timer once libevent is set up */
 	slog_fsync_init(s);
 

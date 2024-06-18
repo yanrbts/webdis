@@ -22,12 +22,16 @@
  */
 void
 slog_init(struct server *s) {
-
 	s->log.self = getpid();
 
-	if(s->cfg->logfile) {
+	if(s->cfg->logfile || s->cfg->daemonize) {
 
 		int old_fd = s->log.fd;
+
+		/* When running in the background, logs need to 
+		 * be recorded to facilitate problem query */
+		if (s->cfg->logfile == NULL)
+			s->cfg->logfile = "webdis.log";
 
 		s->log.fd = open(s->cfg->logfile,
 			O_WRONLY | O_APPEND | O_CREAT, S_IRUSR|S_IWUSR);
@@ -42,11 +46,8 @@ slog_init(struct server *s) {
 
 		fprintf(stderr, "Could not open %s: %s\n", s->cfg->logfile,
 				strerror(errno));
-	} else if (s->cfg->daemonize) {
-
-	} else {
-		s->log.fd = 2; /* stderr */
-	}
+	} 
+	s->log.fd = 2; /* stderr */
 }
 
 static void
