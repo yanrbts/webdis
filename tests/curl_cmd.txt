@@ -1,5 +1,7 @@
-curl -X POST http://localhost:7379/fileset -H "Content-Type: application/json" -d '{"filename":"file1","uuid":"file1uuid","filepath":"/path/to/file1.txt","machine":"f526255265340d994510f8d1652e1eb1"}'
+curl -X POST http://localhost:7379/fileset -H "Content-Type: application/json" -d '{"filename":"file1","uuid":"fileuuid1","filepath":"/path/to/file1.txt","machine":"f526255265340d994510f8d1652e1eb1"}'
 hget machine:f526255265340d994510f8d1652e1eb1 file1uuid
+
+curl -X POST http://localhost:7379/fileset -H "Content-Type: application/json" -d '{"filename":"file1","uuid":"fileuuid1","filepath":"/path/to/file1.txt","machine":"f526255265340d994510f8d1652e1eb1"}'
 
 curl -X POST http://localhost:7379/filegetall -H "Content-Type: application/json" -d '{"machine":"f526255265340d994510f8d1652e1eb3","page":0}'
 curl -X POST http://localhost:7379/filegettrace -H "Content-Type: application/json" -d '{"uuid":"fileuuid7","page":0}'

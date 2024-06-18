@@ -18,12 +18,18 @@
 #include <sys/ioctl.h>
 #include <limits.h>
 
+char *ascii_logo ="\n" 
+"    __                                      | Version: %s\n"                       
+"   / /__________  ______   _____  _____     | Port: %d \n"
+"  / //_/ ___/ _ \\/ ___/ | / / _ \\/ ___/     | PID: %ld\n"
+" / ,< (__  )  __/ /   | |/ /  __/ /         | Author: Yanruibing\n"   
+"/_/|_/____/\\___/_/    |___/\\___/_/          | Web: http://www.kxyk.com \n\n";
+
 /**
  * Sets up a non-blocking socket
  */
 static int
 socket_setup(struct server *s, const char *ip, int port) {
-
 	int reuse = 1;
 	struct sockaddr_in addr;
 	socklen_t len = sizeof(addr);
@@ -159,7 +165,6 @@ server_stop(struct server *s) {
 
 static void
 server_can_accept(int fd, short event, void *ptr) {
-
 	struct server *s = ptr;
 	struct worker *w;
 	struct http_client *c;
@@ -192,7 +197,10 @@ server_can_accept(int fd, short event, void *ptr) {
 		/* loop over ring of workers */
 		s->next_worker = (s->next_worker + 1) % s->cfg->http_threads;
 	} else { /* too many connections */
-		slog(s, WEBDIS_NOTICE, "Too many connections", 0);
+		char log_msg[200];
+		int log_msg_sz = snprintf(log_msg, sizeof(log_msg),
+			"accept failed (%d): %s", errno, strerror(errno));
+		slog(s, WEBDIS_ERROR, log_msg, log_msg_sz);
 	}
 }
 
@@ -216,7 +224,7 @@ server_daemonize(struct server *s, const char *pidfile) {
 	}
 
 	/* write pidfile */
-	if(pidfile) {
+	if (pidfile) {
 		int pid_fd = open(pidfile, O_WRONLY | O_CREAT | O_TRUNC, 0600);
 		if(pid_fd > 0) {
 			char pid_buffer[(CHAR_BIT * sizeof(int) / 3) + 3]; /* max length for int */
@@ -285,9 +293,11 @@ server_start(struct server *s) {
 
 		/* sometimes event mech gets lost on fork */
 		if(event_reinit(s->base) != 0) {
-			fprintf(stderr, "Error: event_reinit failed after fork");
+			slog(s, WEBDIS_ERROR, "Error: event_reinit failed after fork", 0);
 		}
 	}
+	/* print logo */
+	dprintf(s->log.fd, ascii_logo, WEBDIS_VERSION, s->cfg->http_port, getpid());
 
 	/* ignore sigpipe */
 #ifdef SIGPIPE
@@ -321,7 +331,7 @@ server_start(struct server *s) {
 		slog(s, WEBDIS_ERROR, "Error calling event_add on socket", 0);
 		return -1;
 	}
-
+	
 	/* initialize fsync timer once libevent is set up */
 	slog_fsync_init(s);
 

@@ -3,6 +3,7 @@
 #include "cmd.h"
 #include "http.h"
 #include "client.h"
+#include "slog.h"
 
 #include <string.h>
 #include <strings.h>
@@ -576,46 +577,8 @@ char* json_ws_error(int http_status, const char *msg, size_t msg_sz, size_t *out
 }
 /*************************************API******************************************/
 
-static json_t *json_wrap_api_reply(const struct cmd *cmd, const redisReply *r) {
-	(void)cmd;
-
-	json_t *jlist, *jroot = json_object(); /* that's what we return */
-	
-	char *verb = strdup("flag");
-	switch(r->type) {
-		case REDIS_REPLY_STATUS:
-		case REDIS_REPLY_ERROR:
-			json_object_set_new(jroot, 
-								verb, 
-								r->type == REDIS_REPLY_ERROR ? 
-								json_string("FAIL") : 
-								json_string(r->str));
-			break;
-
-		case REDIS_REPLY_STRING:
-			json_object_set_new(jroot, verb, json_string(r->str));
-			break;
-		case REDIS_REPLY_INTEGER:
-			json_object_set_new(jroot, verb, json_integer(r->integer));
-			break;
-		case REDIS_REPLY_ARRAY:
-			if(!(jlist = json_expand_array(r))) {
-				jlist = json_null();
-			}
-			json_object_set_new(jroot, verb, jlist);
-			break;
-
-		case REDIS_REPLY_NIL:
-		default:
-			json_object_set_new(jroot, verb, json_null());
-			break;
-	}
-
-	free(verb);
-	return jroot;
-}
-
-int json_register_parser(const char *buf, size_t len, struct rqparam *r) {
+int json_register_parser(const char *buf, size_t len, struct server *s, struct rqparam *r) {
+	char *tmp;
 	int ret = -1;
 	json_t *root;
 	json_error_t error;
@@ -624,27 +587,23 @@ int json_register_parser(const char *buf, size_t len, struct rqparam *r) {
 
 	root = json_loads(buf, 0, &error);
 	if(!root) {
-		fprintf(stderr, "Error: %s (line %d)\n", error.text, error.line);
+		char log_msg[200];
+		int log_msg_sz = snprintf(log_msg, sizeof(log_msg),
+			"register Json loads error failed %s (line %d)", error.text, error.line);
+		slog(s, WEBDIS_ERROR, log_msg, log_msg_sz);
 		goto end;
 	}
 
 	json_t *machine = json_object_get(root, "machine");
 	if (!json_is_string(machine)) {
-		fprintf(stderr, "error: machine is not a string\n");
-		json_decref(root);
-		goto end;
-	}
-
-	json_t *username = json_object_get(root, "username");
-	if (!json_is_string(username)) {
-		fprintf(stderr, "error: username is not a string\n");
+		slog(s, WEBDIS_ERROR, "register Json error, machine is not a string.", 0);
 		json_decref(root);
 		goto end;
 	}
 
 	json_t *flag = json_object_get(root, "flag");
 	if (!json_is_integer(flag)) {
-		fprintf(stderr, "error: flag is not a integer\n");
+		slog(s, WEBDIS_ERROR, "register Json error, flag is not a integer.", 0);
 		json_decref(root);
 		goto end;
 	}
@@ -652,7 +611,11 @@ int json_register_parser(const char *buf, size_t len, struct rqparam *r) {
 	r->ftype = WB_REGISTER;
 	r->param.ureg.flag = json_integer_value(flag);
 	r->param.ureg.machine = strdup(json_string_value(machine));
-	r->param.ureg.username = strdup(json_string_value(username));
+
+	json_object_del(root, "flag");
+	tmp = json_string_output(root, NULL);
+	r->param.ureg.data = strdup(tmp);
+	free(tmp);
 
 	ret = 0;
 	json_decref(root);
@@ -660,7 +623,7 @@ end:
 	return ret;
 }
 
-int json_fileset_parser(const char *buf, size_t len, struct rqparam *r) {
+int json_fileset_parser(const char *buf, size_t len, struct server *s, struct rqparam *r) {
 	int ret = -1;
 	char *tmp;
 	json_t *root;
@@ -670,20 +633,23 @@ int json_fileset_parser(const char *buf, size_t len, struct rqparam *r) {
 
 	root = json_loads(buf, 0, &error);
 	if(!root) {
-		fprintf(stderr, "Error: %s (line %d)\n", error.text, error.line);
+		char log_msg[200];
+		int log_msg_sz = snprintf(log_msg, sizeof(log_msg),
+			"fileset Json loads error failed %s (line %d)", error.text, error.line);
+		slog(s, WEBDIS_ERROR, log_msg, log_msg_sz);
 		goto end;
 	}
 
 	json_t *uuid = json_object_get(root, "uuid");
 	if (!json_is_string(uuid)) {
-		fprintf(stderr, "error: uuid is not a string\n");
+		slog(s, WEBDIS_ERROR, "fileset Json error, uuid is not a string.", 0);
 		json_decref(root);
 		goto end;
 	}
 
 	json_t *machine = json_object_get(root, "machine");
 	if (!json_is_string(machine)) {
-		fprintf(stderr, "error: uuid is not a string\n");
+		slog(s, WEBDIS_ERROR, "fileset Json error, machine is not a string.", 0);
 		json_decref(root);
 		goto end;
 	}
@@ -716,7 +682,7 @@ static long long ustime(void) {
     return ust;
 }
 
-int json_traceset_parser(const char *buf, size_t len, struct rqparam *r) {
+int json_traceset_parser(const char *buf, size_t len, struct server *s, struct rqparam *r) {
 	int ret = -1;
 	json_t *root;
 	json_error_t error;
@@ -726,13 +692,16 @@ int json_traceset_parser(const char *buf, size_t len, struct rqparam *r) {
 
 	root = json_loads(buf, 0, &error);
 	if(!root) {
-		fprintf(stderr, "Error: %s (line %d)\n", error.text, error.line);
+		char log_msg[200];
+		int log_msg_sz = snprintf(log_msg, sizeof(log_msg),
+			"traceset Json loads error failed %s (line %d)", error.text, error.line);
+		slog(s, WEBDIS_ERROR, log_msg, log_msg_sz);
 		goto end;
 	}
 
 	json_t *uuid = json_object_get(root, "uuid");
 	if (!json_is_string(uuid)) {
-		fprintf(stderr, "error: uuid is not a string\n");
+		slog(s, WEBDIS_ERROR, "traceset Json error, uuid is not a string.", 0);
 		json_decref(root);
 		goto end;
 	}
@@ -749,7 +718,7 @@ end:
 	return ret;
 }
 
-int json_fileget_parser(const char *buf, size_t len, struct rqparam *r) {
+int json_fileget_parser(const char *buf, size_t len, struct server *s, struct rqparam *r) {
 	int ret = -1;
 	json_t *root;
 	json_error_t error;
@@ -758,13 +727,16 @@ int json_fileget_parser(const char *buf, size_t len, struct rqparam *r) {
 
 	root = json_loads(buf, 0, &error);
 	if(!root) {
-		fprintf(stderr, "Error: %s (line %d)\n", error.text, error.line);
+		char log_msg[200];
+		int log_msg_sz = snprintf(log_msg, sizeof(log_msg),
+			"fileget Json loads error failed %s (line %d)", error.text, error.line);
+		slog(s, WEBDIS_ERROR, log_msg, log_msg_sz);
 		goto end;
 	}
 
 	json_t *uuid = json_object_get(root, "uuid");
 	if (!json_is_string(uuid)) {
-		fprintf(stderr, "error: uuid is not a string\n");
+		slog(s, WEBDIS_ERROR, "fileget Json error, uuid is not a string.", 0);
 		json_decref(root);
 		goto end;
 	}
@@ -778,7 +750,7 @@ end:
 	return ret;
 }
 
-int json_traceget_parser(const char *buf, size_t len, struct rqparam *r) {
+int json_traceget_parser(const char *buf, size_t len, struct server *s, struct rqparam *r) {
 	int ret = -1;
 	json_t *root;
 	json_error_t error;
@@ -787,20 +759,23 @@ int json_traceget_parser(const char *buf, size_t len, struct rqparam *r) {
 
 	root = json_loads(buf, 0, &error);
 	if(!root) {
-		fprintf(stderr, "Error: %s (line %d)\n", error.text, error.line);
+		char log_msg[200];
+		int log_msg_sz = snprintf(log_msg, sizeof(log_msg),
+			"traceget Json loads error failed %s (line %d)", error.text, error.line);
+		slog(s, WEBDIS_ERROR, log_msg, log_msg_sz);
 		goto end;
 	}
 
 	json_t *uuid = json_object_get(root, "uuid");
 	if (!json_is_string(uuid)) {
-		fprintf(stderr, "error: uuid is not a string\n");
+		slog(s, WEBDIS_ERROR, "traceget Json error, uuid is not a string.", 0);
 		json_decref(root);
 		goto end;
 	}
 
 	json_t *page = json_object_get(root, "page");
 	if (!json_is_integer(page)) {
-		fprintf(stderr, "error: page is not a integer\n");
+		slog(s, WEBDIS_ERROR, "traceget Json error, page is not a integer.", 0);
 		json_decref(root);
 		goto end;
 	}
@@ -815,7 +790,7 @@ end:
 	return ret;
 }
 
-int json_filegetall_parser(const char *buf, size_t len, struct rqparam *r) {
+int json_filegetall_parser(const char *buf, size_t len, struct server *s, struct rqparam *r) {
 	int ret = -1;
 	json_t *root;
 	json_error_t error;
@@ -824,20 +799,23 @@ int json_filegetall_parser(const char *buf, size_t len, struct rqparam *r) {
 
 	root = json_loads(buf, 0, &error);
 	if(!root) {
-		fprintf(stderr, "Error: %s (line %d)\n", error.text, error.line);
+		char log_msg[200];
+		int log_msg_sz = snprintf(log_msg, sizeof(log_msg),
+			"filegetall Json loads error failed %s (line %d)", error.text, error.line);
+		slog(s, WEBDIS_ERROR, log_msg, log_msg_sz);
 		goto end;
 	}
 
 	json_t *machine = json_object_get(root, "machine");
 	if (!json_is_string(machine)) {
-		fprintf(stderr, "error: uuid is not a string\n");
+		slog(s, WEBDIS_ERROR, "filegetall Json error, machine is not a string.", 0);
 		json_decref(root);
 		goto end;
 	}
 
 	json_t *page = json_object_get(root, "page");
 	if (!json_is_integer(page)) {
-		fprintf(stderr, "error: page is not a integer\n");
+		slog(s, WEBDIS_ERROR, "filegetall Json error, page is not a integer.", 0);
 		json_decref(root);
 		goto end;
 	}
@@ -852,10 +830,11 @@ end:
 	return ret;
 }
 
-void json_api_reply(redisAsyncContext *c, void *r, void *privdata) {
+void json_hgetorset_reply(redisAsyncContext *c, void *r, void *privdata) {
 	redisReply *reply = r;
 	struct cmd *cmd = privdata;
-	json_t *j;
+	json_t *jroot, *jtmp = NULL;
+	json_error_t error;
 	char *jstr;
 
 	(void)c;
@@ -869,15 +848,98 @@ void json_api_reply(redisAsyncContext *c, void *r, void *privdata) {
 		return;
 	}
 
-	/* encode redis reply as JSON */
-	j = json_wrap_api_reply(cmd, r);
+	jroot = json_object();
+	switch(reply->type) {
+	case REDIS_REPLY_STATUS:
+	case REDIS_REPLY_ERROR:
+		json_object_set_new(jroot, 
+							"flag", 
+							reply->type == REDIS_REPLY_ERROR ? 
+							json_string("FAIL") : 
+							json_string(reply->str));
+		break;
 
+	case REDIS_REPLY_STRING:
+		jtmp = json_loads(reply->str, 0, &error);
+		json_object_update(jroot, jtmp);
+		break;
+	case REDIS_REPLY_INTEGER:
+		json_object_set_new(jroot, "flag", json_string("OK"));
+		break;
+	case REDIS_REPLY_NIL:
+	default:
+		json_object_set_new(jroot, "flag", json_null());
+		break;
+	}
 	/* get JSON as string, possibly with JSONP wrapper */
-	jstr = json_string_output(j, cmd->jsonp);
+	jstr = json_string_output(jroot, cmd->jsonp);
 	/* send reply */
 	format_send_reply(cmd, jstr, strlen(jstr), "application/json");
 	/* cleanup */
-	json_decref(j);
+	if (jtmp)
+		json_decref(jtmp);
+	json_decref(jroot);
+	free(jstr);
+}
+
+void json_register_reply(redisAsyncContext *c, void *r, void *privdata) {
+	redisReply *reply = r;
+	struct cmd *cmd = privdata;
+	json_t *jroot, *jtmp = NULL;
+	char *jstr;
+	json_error_t error;
+
+	(void)c;
+	/* broken connection */
+	if(cmd == NULL) {
+		return;
+	}
+	/* broken Redis link */
+	if(reply == NULL) { 
+		format_send_error(cmd, 503, "Service Unavailable");
+		return;
+	}
+
+	jroot = json_object();
+	switch(reply->type) {
+	case REDIS_REPLY_ERROR:
+		json_object_set_new(jroot, "flag", json_string("FAIL"));
+		break;
+	case REDIS_REPLY_NIL: /* user not exist*/
+	case REDIS_REPLY_INTEGER: /* insert succrss */
+	case REDIS_REPLY_STRING: /* user already exist */
+		if (cmd->rparam->param.ureg.flag == 1) {
+			/* Insert user successfully */;
+			jtmp = json_loads(cmd->rparam->param.ureg.data, 0, &error);
+			json_object_update(jroot, jtmp);
+		} else {
+			if (reply->str) {
+				/* User already exists */;
+				jtmp = json_loads(cmd->rparam->param.ureg.data, 0, &error);
+				json_object_update(jroot, jtmp);
+			} else {
+				/* User does not exist Start insert 
+				 * Here, you must change the flag to insert to 
+				 * facilitate the judgment during callback*/;
+				cmd->rparam->param.ureg.flag = 1;
+				redisAsyncCommand(c, json_register_reply, cmd, 
+								"HSET userkey:%s %s %s", 
+								cmd->rparam->param.ureg.machine,
+								cmd->rparam->param.ureg.machine,
+								cmd->rparam->param.ureg.data);
+				return;
+			}
+		}
+		break;
+	}
+	/* get JSON as string, possibly with JSONP wrapper */
+	jstr = json_string_output(jroot, cmd->jsonp);
+	/* send reply */
+	format_send_reply(cmd, jstr, strlen(jstr), "application/json");
+	/* cleanup */
+	if (jtmp)
+		json_decref(jtmp);
+	json_decref(jroot);
 	free(jstr);
 }
 

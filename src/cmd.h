@@ -75,7 +75,7 @@ struct rqparam {
 		/* user register */
 		struct {
 			char *machine;
-			char *username;
+			char *data;
 			int flag;
 		} ureg;
 		
@@ -110,7 +110,7 @@ struct multicmd {
 	int count;
 };
 
-typedef int(*jparsefunc)(const char *buf, size_t len, struct rqparam *r);
+typedef int(*jparsefunc)(const char *buf, size_t len, struct server *s, struct rqparam *r);
 
 struct apientry {
 	char *uri;                  /* HTTP URI */
@@ -158,9 +158,6 @@ cmd_is_subscribe(struct cmd *cmd);
 
 void
 cmd_send(struct cmd *cmd, formatting_fun f_format);
-
-// void
-// cmd_send_format(struct cmd *cmd, formatting_fun f_format);
 
 void
 cmd_setup(struct cmd *cmd, struct http_client *client);

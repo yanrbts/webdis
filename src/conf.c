@@ -95,7 +95,7 @@ conf_read(const char *filename) {
 	conf->http_threads = 4;
 	conf->user = getuid();
 	conf->group = getgid();
-	conf->logfile = strdup("webdis.log");
+	conf->logfile = NULL;//strdup("webdis.log");
 	conf->log_fsync.mode = LOG_FSYNC_AUTO;
 	conf->verbosity = WEBDIS_NOTICE;
 	conf->daemonize = 0;
@@ -171,7 +171,8 @@ conf_read(const char *filename) {
 			}
 			free(groupname);
 		} else if(strcmp(json_object_iter_key(kv),"logfile") == 0 && json_typeof(jtmp) == JSON_STRING){
-			free(conf->logfile);
+			if (conf->logfile)
+				free(conf->logfile);
 			conf->logfile = conf_string_or_envvar(json_string_value(jtmp));
 		} else if(strcmp(json_object_iter_key(kv),"log_fsync") == 0) {
 			if(json_typeof(jtmp) == JSON_STRING && strcmp(json_string_value(jtmp), "auto") == 0) {
