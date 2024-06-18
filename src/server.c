@@ -198,7 +198,10 @@ server_can_accept(int fd, short event, void *ptr) {
 		/* loop over ring of workers */
 		s->next_worker = (s->next_worker + 1) % s->cfg->http_threads;
 	} else { /* too many connections */
-		slog(s, WEBDIS_NOTICE, "Too many connections", 0);
+		char log_msg[200];
+		int log_msg_sz = snprintf(log_msg, sizeof(log_msg),
+			"accept failed (%d): %s", errno, strerror(errno));
+		slog(s, WEBDIS_NOTICE, log_msg, log_msg_sz);
 	}
 }
 
