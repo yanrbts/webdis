@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <stdarg.h>
 #include <time.h>
+#include <sys/time.h>
 #include <sys/types.h>
 #include <unistd.h>
 #include <string.h>
@@ -102,10 +103,13 @@ slog_internal(struct server *s, log_level level,
 	const char *c = "EWNIDT";
 	time_t now;
 	struct tm now_tm, *lt_ret;
+	struct timeval tv;
+	int off;
 	char time_buf[64];
 	char msg[1 + SLOG_MSG_MAX_LEN];
 	char line[2 * SLOG_MSG_MAX_LEN]; /* bounds are checked. */
 	int line_sz, ret;
+	
 
 	if(!s->log.fd) return;
 
@@ -116,8 +120,11 @@ slog_internal(struct server *s, log_level level,
 	/* get current time */
 	now = time(NULL);
 	lt_ret = localtime_r(&now, &now_tm);
+	gettimeofday(&tv,NULL);
+
 	if(lt_ret) {
-		strftime(time_buf, sizeof(time_buf), "%d %b %Y %H:%M:%S.", lt_ret);
+		off = strftime(time_buf, sizeof(time_buf), "%d %b %Y %H:%M:%S.", lt_ret);
+		snprintf(time_buf+off,sizeof(time_buf)-off,"%03d",(int)tv.tv_usec/1000);
 	} else {
 		const char err_msg[] = "(NO TIME AVAILABLE)";
 		memcpy(time_buf, err_msg, sizeof(err_msg));
@@ -126,7 +133,7 @@ slog_internal(struct server *s, log_level level,
 	/* generate output line. */
 	char letter = (level == WEBDIS_TRACE ? c[5] : c[level]);
 	line_sz = snprintf(line, sizeof(line),
-		"[%d] %s %c %s\n", (int)s->log.self, time_buf, letter, msg);
+		"[%d] %c %s %s\n", (int)s->log.self, letter, time_buf, msg);
 
 	/* write to log and maybe flush to disk. */
 	ret = write(s->log.fd, line, line_sz);
