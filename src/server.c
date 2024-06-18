@@ -294,6 +294,8 @@ server_start(struct server *s) {
 			slog(s, WEBDIS_ERROR, "Error: event_reinit failed after fork", 0);
 		}
 	}
+	/* print logo */
+	dprintf(s->log.fd, ascii_logo, WEBDIS_VERSION, s->cfg->http_port, getpid());
 
 	/* ignore sigpipe */
 #ifdef SIGPIPE
@@ -327,10 +329,7 @@ server_start(struct server *s) {
 		slog(s, WEBDIS_ERROR, "Error calling event_add on socket", 0);
 		return -1;
 	}
-
-	/* print logo */
-	// printf(ascii_logo, WEBDIS_VERSION, s->cfg->http_port, getpid());
-	dprintf(s->log.fd, ascii_logo, WEBDIS_VERSION, s->cfg->http_port, getpid());
+	
 	/* initialize fsync timer once libevent is set up */
 	slog_fsync_init(s);
 
