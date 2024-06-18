@@ -117,7 +117,7 @@ slog_internal(struct server *s, log_level level,
 	now = time(NULL);
 	lt_ret = localtime_r(&now, &now_tm);
 	if(lt_ret) {
-		strftime(time_buf, sizeof(time_buf), "%d %b %H:%M:%S", lt_ret);
+		strftime(time_buf, sizeof(time_buf), "%d %b %Y %H:%M:%S.", lt_ret);
 	} else {
 		const char err_msg[] = "(NO TIME AVAILABLE)";
 		memcpy(time_buf, err_msg, sizeof(err_msg));
