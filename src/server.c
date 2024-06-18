@@ -165,7 +165,6 @@ server_stop(struct server *s) {
 
 static void
 server_can_accept(int fd, short event, void *ptr) {
-
 	struct server *s = ptr;
 	struct worker *w;
 	struct http_client *c;
@@ -201,7 +200,7 @@ server_can_accept(int fd, short event, void *ptr) {
 		char log_msg[200];
 		int log_msg_sz = snprintf(log_msg, sizeof(log_msg),
 			"accept failed (%d): %s", errno, strerror(errno));
-		slog(s, WEBDIS_NOTICE, log_msg, log_msg_sz);
+		slog(s, WEBDIS_ERROR, log_msg, log_msg_sz);
 	}
 }
 

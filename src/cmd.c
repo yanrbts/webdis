@@ -504,7 +504,7 @@ start_cmd_run(struct worker *w,
 	char buffer[1024] = {0};
 
 	r = calloc(1, sizeof(struct rqparam));
-	api->func(body, body_len, r);
+	api->func(body, body_len, w->s, r);
 
 	switch (api->ftype) {
 	case WB_REGISTER:
