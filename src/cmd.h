@@ -160,6 +160,9 @@ void
 cmd_send(struct cmd *cmd, formatting_fun f_format);
 
 void
+cmd_send_format(struct cmd *cmd, formatting_fun f_format, const char *fmt);
+
+void
 cmd_setup(struct cmd *cmd, struct http_client *client);
 
 #endif

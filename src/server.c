@@ -82,15 +82,23 @@ socket_setup(struct server *s, const char *ip, int port) {
 	}
 
 	if (getsockname(fd, (struct sockaddr *)&addr, &len) != -1) {
-		const char* comment = "Webdis listening on port %d";
+		char buffer[256] = {0};
+		int len;
 		int port_num = ntohs(addr.sin_port);
 
-		char* buffer = malloc(strlen(comment) -2 + strlen("65535") + 1);
-		sprintf(buffer, comment, port_num);
-
-		slog(s, WEBDIS_INFO, buffer , 0);
-
-        free(buffer);
+		len = snprintf(buffer, sizeof(buffer), 
+					"Webdis listening on port %d",
+					port_num);
+		if (len < 0) {
+			/* len < 0 */
+			slog(s, WEBDIS_INFO, "snprintf error", 0);
+		} else if ((size_t)len >= sizeof(buffer)) {
+			buffer[sizeof(buffer) - 1] = '\0';
+			slog(s, WEBDIS_INFO, buffer, 0);
+		} else {
+			/* 0 < len < sizeof(buffer)*/
+			slog(s, WEBDIS_INFO, buffer, (size_t)len);
+		}
     }
 
 	/* there you go, ready to accept! */

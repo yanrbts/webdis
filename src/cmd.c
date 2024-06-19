@@ -606,6 +606,13 @@ cmd_send(struct cmd *cmd, formatting_fun f_format) {
 		(const char **)cmd->argv, cmd->argv_len);
 }
 
+void
+cmd_send_format(struct cmd *cmd, formatting_fun f_format, const char *fmt) {
+	// redisAsyncCommand(cmd->ac, f_format, 
+	// 				f_format == NULL ? NULL : cmd,
+	// 				fmt,);
+}
+
 /**
  * Select Content-Type and processing function.
  */
