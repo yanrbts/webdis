@@ -6,4 +6,5 @@ websocket
 *.png
 pubsub
 *.d
+*.data
 __pycache__/
