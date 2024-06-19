@@ -466,7 +466,8 @@ exec_cmd(struct worker *w,
 	cmd->database = w->s->cfg->database;
 	cmd->rparam = r;
 	/* Truncate the command into a command array based on spaces */
-	splitargv(cmdline, cmd);
+	// splitargv(cmdline, cmd);
+
 	/* add HTTP info */
 	cmd_setup(cmd, client);
 
@@ -480,7 +481,9 @@ exec_cmd(struct worker *w,
 
 	/* send it off! */
 	if(cmd->ac) {
-		cmd_send(cmd, callback);
+		cmd_send_format(cmd, callback, cmdline);
+
+		// cmd_send(cmd, callback);
 		/* If you do not set an asynchronous callback function, 
 		 * you must release the cmd variable, otherwise a memory 
 		 * leak will occur. If you set a callback, cmd will be 
@@ -607,10 +610,11 @@ cmd_send(struct cmd *cmd, formatting_fun f_format) {
 }
 
 void
-cmd_send_format(struct cmd *cmd, formatting_fun f_format, const char *fmt) {
-	// redisAsyncCommand(cmd->ac, f_format, 
-	// 				f_format == NULL ? NULL : cmd,
-	// 				fmt,);
+cmd_send_format(struct cmd *cmd, formatting_fun f_format, const char *cmdline) {
+	// printf("%s\n", cmdline);
+	redisAsyncCommand(cmd->ac, f_format, 
+					f_format == NULL ? NULL : cmd,
+					cmdline);
 }
 
 /**

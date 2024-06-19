@@ -967,7 +967,7 @@ void json_hscan_reply(redisAsyncContext *c, void *r, void *privdata) {
 			json_object_set_new(jroot, 
 								"flag", 
 								reply->type == REDIS_REPLY_ERROR 
-								? json_string("FAIL") 
+								? json_string(reply->str) 
 								: json_string(reply->str));
 			break;
 
