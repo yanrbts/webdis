@@ -34,8 +34,14 @@ cmd_new(struct http_client *client, int count) {
 		client->last_cmd = c;
 	}
 	
-	c->argv = calloc(count, sizeof(char*));
-	c->argv_len = calloc(count, sizeof(size_t));
+	if (count == 0) {
+		c->argv = NULL;
+		c->argv_len = NULL;
+	} else {
+		c->argv = calloc(count, sizeof(char*));
+		c->argv_len = calloc(count, sizeof(size_t));
+	}
+	
 	c->rparam = NULL;
 
 	return c;
@@ -531,7 +537,7 @@ start_cmd_run(struct worker *w,
 			api->count = 3;
 		}
 		
-		if(exec_cmd(w, client, buffer, api->replyfunc, api->count, r) == -1)
+		if(exec_cmd(w, client, buffer, api->replyfunc, 0, r) == -1)
 			goto end;
 		return CMD_SENT;
 	case WB_FILESET:
@@ -539,7 +545,7 @@ start_cmd_run(struct worker *w,
 		/* If exec_cmd returns -1, it means failure. At this time, the cmd variable 
 		 * has been released. The r variable has also been released. Therefore, 
 		 * r is only released when exec_cmd succeeds.*/
-		if(exec_cmd(w, client, buffer, api->replyfunc, api->count, r) == -1)
+		if(exec_cmd(w, client, buffer, api->replyfunc, 0, r) == -1)
 			goto end;
 		return CMD_SENT;
 	case WB_FILEGET:
@@ -568,7 +574,7 @@ start_cmd_run(struct worker *w,
 	}
 
 	rqparam_free(r);
-	if (exec_cmd(w, client, buffer, api->replyfunc, api->count, NULL) == 0)
+	if (exec_cmd(w, client, buffer, api->replyfunc, 0, NULL) == 0)
 		return CMD_SENT;
 end:
 	client->reused_cmd = NULL;
@@ -611,7 +617,6 @@ cmd_send(struct cmd *cmd, formatting_fun f_format) {
 
 void
 cmd_send_format(struct cmd *cmd, formatting_fun f_format, const char *cmdline) {
-	// printf("%s\n", cmdline);
 	redisAsyncCommand(cmd->ac, f_format, 
 					f_format == NULL ? NULL : cmd,
 					cmdline);
