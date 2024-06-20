@@ -24,6 +24,15 @@ typedef enum {
 	CMD_REDIS_UNAVAIL
 } cmd_response_t;
 
+typedef enum {
+	WB_REGISTER,
+	WB_FILESET,
+	WB_FILEGET,
+	WB_FILEGETALL,
+	WB_TRACESET,
+	WB_TRACEGET
+} functype;
+
 struct cmd {
 	int fd;
 
@@ -31,6 +40,7 @@ struct cmd {
 	char **argv;
 	size_t *argv_len;
 	struct rqparam *rparam;
+	functype ftype;
 
 	/* HTTP data */
 	char *mime; /* forced output content-type */
@@ -59,15 +69,6 @@ struct subscription {
 	struct server *s;
 	struct cmd *cmd;
 };
-
-typedef enum {
-	WB_REGISTER,
-	WB_FILESET,
-	WB_FILEGET,
-	WB_FILEGETALL,
-	WB_TRACESET,
-	WB_TRACEGET
-} functype;
 
 struct rqparam {
 	functype ftype;

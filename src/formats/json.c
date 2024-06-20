@@ -4,6 +4,7 @@
 #include "http.h"
 #include "client.h"
 #include "slog.h"
+#include "worker.h"
 
 #include <string.h>
 #include <strings.h>
@@ -852,6 +853,8 @@ void json_hgetorset_reply(redisAsyncContext *c, void *r, void *privdata) {
 	switch(reply->type) {
 	case REDIS_REPLY_STATUS:
 	case REDIS_REPLY_ERROR:
+		if (reply->type == REDIS_REPLY_ERROR)
+			slog(cmd->w->s, WEBDIS_ERROR, reply->str, 0);
 		json_object_set_new(jroot, 
 							"flag", 
 							reply->type == REDIS_REPLY_ERROR ? 
@@ -903,6 +906,7 @@ void json_register_reply(redisAsyncContext *c, void *r, void *privdata) {
 	jroot = json_object();
 	switch(reply->type) {
 	case REDIS_REPLY_ERROR:
+		slog(cmd->w->s, WEBDIS_ERROR, reply->str, 0);
 		json_object_set_new(jroot, "flag", json_string("FAIL"));
 		break;
 	case REDIS_REPLY_NIL: /* user not exist*/
@@ -910,11 +914,13 @@ void json_register_reply(redisAsyncContext *c, void *r, void *privdata) {
 	case REDIS_REPLY_STRING: /* user already exist */
 		if (cmd->rparam->param.ureg.flag == 1) {
 			/* Insert user successfully */;
+			slog(cmd->w->s, WEBDIS_INFO, "Insert user successfully", 0);
 			jtmp = json_loads(cmd->rparam->param.ureg.data, 0, &error);
 			json_object_update(jroot, jtmp);
 		} else {
 			if (reply->str) {
 				/* User already exists */;
+				slog(cmd->w->s, WEBDIS_INFO, "User already exists", 0);
 				jtmp = json_loads(reply->str, 0, &error);
 				json_object_update(jroot, jtmp);
 			} else {
@@ -964,10 +970,12 @@ void json_hscan_reply(redisAsyncContext *c, void *r, void *privdata) {
 	switch(reply->type) {
 		case REDIS_REPLY_STATUS:
 		case REDIS_REPLY_ERROR:
+			if (reply->type == REDIS_REPLY_ERROR)
+				slog(cmd->w->s, WEBDIS_ERROR, reply->str, 0);
 			json_object_set_new(jroot, 
 								"flag", 
 								reply->type == REDIS_REPLY_ERROR 
-								? json_string(reply->str) 
+								? json_string("FAIL") 
 								: json_string(reply->str));
 			break;
 
@@ -1003,7 +1011,7 @@ void json_hscan_reply(redisAsyncContext *c, void *r, void *privdata) {
 				 * This callback function is only used by the filegetall and filegettrace 
 				 * interfaces. The number of commands for the filegetall interface is 5, 
 				 * and the number of commands for the filegettrace interface is 7.*/
-				if (cmd->count == 7) {
+				if (cmd->ftype == WB_TRACEGET) {
 					json_object_set_new(jroot, "traces", jlist);
 				} else {
 					json_object_set_new(jroot, "files", jlist);
@@ -1027,13 +1035,13 @@ void json_hscan_reply(redisAsyncContext *c, void *r, void *privdata) {
 
 void setCallback(redisAsyncContext *c, void *r, void *privdata) {
 	(void)c;
-	(void)privdata;
+	struct cmd *cmd = privdata;
 
     redisReply *reply = (redisReply *)r;
     if (reply == NULL) return;
 
     if (reply->type == REDIS_REPLY_ERROR) {
-        printf("Error: %s\n", reply->str);
+		slog(cmd->w->s, WEBDIS_ERROR, reply->str, 0);
     }
 }
 
@@ -1079,6 +1087,7 @@ void json_exec_reply(redisAsyncContext *c, void *r, void *privdata) {
 	jroot = json_object();
 
 	if (reply->type == REDIS_REPLY_ERROR) {
+		slog(cmd->w->s, WEBDIS_ERROR, reply->str, 0);
 		json_object_set_new(jroot, "flag", json_string("FAIL"));
 	} else if (reply->type == REDIS_REPLY_ARRAY) {
 		for (size_t i = 0; i < reply->elements; i++) {

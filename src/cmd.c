@@ -464,13 +464,15 @@ exec_cmd(struct worker *w,
 		char *cmdline,
 		formatting_fun callback, 
 		int count,
-		struct rqparam *r) {
+		struct rqparam *r,
+		functype fy) {
 	struct cmd *cmd;
 
 	cmd = cmd_new(client, count);
 	cmd->fd = client->fd;
 	cmd->database = w->s->cfg->database;
 	cmd->rparam = r;
+	cmd->ftype = fy;
 	/* Truncate the command into a command array based on spaces */
 	// splitargv(cmdline, cmd);
 
@@ -488,7 +490,6 @@ exec_cmd(struct worker *w,
 	/* send it off! */
 	if(cmd->ac) {
 		cmd_send_format(cmd, callback, cmdline);
-
 		// cmd_send(cmd, callback);
 		/* If you do not set an asynchronous callback function, 
 		 * you must release the cmd variable, otherwise a memory 
@@ -537,7 +538,7 @@ start_cmd_run(struct worker *w,
 			api->count = 3;
 		}
 		
-		if(exec_cmd(w, client, buffer, api->replyfunc, 0, r) == -1)
+		if(exec_cmd(w, client, buffer, api->replyfunc, 0, r, WB_REGISTER) == -1)
 			goto end;
 		return CMD_SENT;
 	case WB_FILESET:
@@ -545,7 +546,7 @@ start_cmd_run(struct worker *w,
 		/* If exec_cmd returns -1, it means failure. At this time, the cmd variable 
 		 * has been released. The r variable has also been released. Therefore, 
 		 * r is only released when exec_cmd succeeds.*/
-		if(exec_cmd(w, client, buffer, api->replyfunc, 0, r) == -1)
+		if(exec_cmd(w, client, buffer, api->replyfunc, 0, r, WB_FILESET) == -1)
 			goto end;
 		return CMD_SENT;
 	case WB_FILEGET:
@@ -573,9 +574,11 @@ start_cmd_run(struct worker *w,
 		goto end;
 	}
 
+	functype fy = r->ftype;
 	rqparam_free(r);
-	if (exec_cmd(w, client, buffer, api->replyfunc, 0, NULL) == 0)
+	if (exec_cmd(w, client, buffer, api->replyfunc, 0, NULL, fy) == 0) {
 		return CMD_SENT;
+	}
 end:
 	client->reused_cmd = NULL;
 	return CMD_REDIS_UNAVAIL;
