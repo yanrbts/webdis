@@ -915,7 +915,7 @@ void json_register_reply(redisAsyncContext *c, void *r, void *privdata) {
 		} else {
 			if (reply->str) {
 				/* User already exists */;
-				jtmp = json_loads(cmd->rparam->param.ureg.data, 0, &error);
+				jtmp = json_loads(reply->str, 0, &error);
 				json_object_update(jroot, jtmp);
 			} else {
 				/* User does not exist Start insert 
