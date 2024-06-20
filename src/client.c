@@ -224,7 +224,7 @@ http_client_new(struct worker *w, int fd, in_addr_t addr) {
 
 	/* callbacks */
 	c->settings.on_url = http_client_on_url;
-	c->settings.on_query_string = http_client_on_query_string;
+	// c->settings.on_query_string = http_client_on_query_string;
 	c->settings.on_body = http_client_on_body;
 	c->settings.on_message_complete = http_client_on_message_complete;
 	c->settings.on_header_field = http_client_on_header_name;
