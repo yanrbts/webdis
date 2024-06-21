@@ -25,6 +25,8 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
+#include <string.h>
+#include <strings.h>
 #include <openssl/conf.h>
 #include <openssl/ssl.h>
 #include <openssl/err.h>
@@ -36,6 +38,7 @@
 #include <sys/uio.h>
 #include <arpa/inet.h>
 #include "conf.h"
+#include "slog.h"
 
 #define WB_TLS_PROTO_TLSv1       (1<<0)
 #define WB_TLS_PROTO_TLSv1_1     (1<<1)
@@ -50,6 +53,104 @@
 #endif
 
 SSL_CTX *tls_ctx = NULL;
+
+/* Create a new char string with the content specified by the 'init' pointer
+ * and 'initlen'.
+ * If NULL is used for 'init' the string is initialized with zero bytes.
+ *
+ * The string is always null-termined (all the sds strings are, always) so
+ * even if you create an sds string with:
+ *
+ * mystring = newstrlen("abc",3);
+ *
+ * You can print the string with printf() as there is an implicit \0 at the
+ * end of the string. However the string is binary safe and can contain
+ * \0 characters in the middle, as the length is stored in the sds header. */
+char *newstrlen(const void *init, size_t initlen) {
+    char *s;
+
+    s = malloc(initlen+1);
+    if (s == NULL) return NULL;
+    if (!init)
+        memset(s, 0, initlen+1);
+    if (initlen && init)
+        memcpy(s, init, initlen);
+    s[initlen] = '\0';
+    return s;
+}
+
+/* Split 's' with separator in 'sep'. An array
+ * of sds strings is returned. *count will be set
+ * by reference to the number of tokens returned.
+ *
+ * On out of memory, zero length string, zero length
+ * separator, NULL is returned.
+ *
+ * Note that 'sep' is able to split a string using
+ * a multi-character separator. For example
+ * split("foo_-_bar","_-_"); will return two
+ * elements "foo" and "bar".
+ *
+ * This version of the function is binary-safe but
+ * requires length arguments. 
+ */
+static char **splitlen(const char *s, int len, const char *sep, int seplen, int *count) {
+    int elements = 0, slots = 5, start = 0, j;
+    char **tokens;
+
+    if (seplen < 1 || len < 0) return NULL;
+
+    tokens = malloc(sizeof(char*) * slots);
+    if (tokens == NULL) return NULL;
+
+    if (len == 0) {
+        *count = 0;
+        return tokens;
+    }
+
+    for (j = 0; j < (len-(seplen-1)); j++) {
+        /* make sure there is room for the next element and the final one */
+        if (slots < elements+2) {
+            char **newtokens;
+
+            slots *= 2;
+            newtokens = realloc(tokens, sizeof(char*)*slots);
+            if (newtokens == NULL) goto cleanup;
+            tokens = newtokens;
+        }
+        /* search the separator */
+        if ((seplen == 1 && *(s+j) == sep[0]) || (memcmp(s+j, sep, seplen) == 0)) {
+            tokens[elements] = newstrlen(s+start, j-start);
+            if (tokens[elements] == NULL) goto cleanup;
+            elements++;
+            start = j+seplen;
+            j = j+seplen-1; /* skip the separator */
+        }
+    }
+    /* Add the final element. We are sure there is room in the tokens array. */
+    tokens[elements] = newstrlen(s+start, len-start);
+    if (tokens[elements] == NULL) goto cleanup;
+    elements++;
+    *count = elements;
+    return tokens;
+
+cleanup:
+    {
+        int i;
+        for (i = 0; i < elements; i++) free(tokens[i]);
+        free(tokens);
+        *count = 0;
+        return NULL;
+    }
+}
+
+/* Free the result returned by splitlen(), or do nothing if 'tokens' is NULL. */
+void sfreesplitres(char **tokens, int count) {
+    if (!tokens) return;
+    while(count--)
+        free(tokens[count]);
+    free(tokens);
+}
 
 static void tlsInit(void) {
     /* 
@@ -221,4 +322,84 @@ static SSL_CTX *createSSLContext(struct httpssl *ctx_config, int protocols, int 
 error:
     if (ctx) SSL_CTX_free(ctx);
     return NULL;
+}
+
+static int parseProtocolsConfig(const char *str) {
+    int i, count = 0;
+    int protocols = 0;
+
+    if (!str) return WB_TLS_PROTO_DEFAULT;
+
+    char **tokens = splitlen(str, strlen(str), " ", 1, &count);
+    if (!tokens) {
+        return -1;
+    }
+    for (i = 0; i < count; i++) {
+        if (!strcasecmp(tokens[i], "tlsv1")) protocols |= WB_TLS_PROTO_TLSv1;
+        else if (!strcasecmp(tokens[i], "tlsv1.1")) protocols |= WB_TLS_PROTO_TLSv1_1;
+        else if (!strcasecmp(tokens[i], "tlsv1.2")) protocols |= WB_TLS_PROTO_TLSv1_2;
+        else if (!strcasecmp(tokens[i], "tlsv1.3")) {
+#ifdef TLS1_3_VERSION
+            protocols |= WB_TLS_PROTO_TLSv1_3;
+#else
+            protocols = -1;
+            break;
+#endif
+        } else {
+            protocols = -1;
+            break;
+        }
+    }
+    sfreesplitres(tokens, count);
+
+    return protocols;
+}
+
+/* Attempt to configure/reconfigure TLS. This operation is atomic and will
+ * leave the SSL_CTX unchanged if fails.
+ * @priv: config of httpssl.
+ * @reconfigure: if true, ignore the previous configure; if false, only
+ * configure from @ctx_config if tls_ctx is NULL.
+ */
+static int tlsConfigure(void *priv, int reconfigure) {
+    struct httpssl *ctx_config = (struct httpssl *)priv;
+    char errbuf[256];
+    SSL_CTX *ctx = NULL;
+    int protocols;
+
+    protocols = parseProtocolsConfig(ctx_config->protocols);
+    if (protocols == -1) goto error;
+
+    /* Create server side/general context */
+    ctx = createSSLContext(ctx_config, protocols, 0);
+    if (!ctx) goto error;
+
+    if (ctx_config->session_caching) {
+        SSL_CTX_set_session_cache_mode(ctx, SSL_SESS_CACHE_SERVER);
+        SSL_CTX_sess_set_cache_size(ctx, ctx_config->session_cache_size);
+        SSL_CTX_set_timeout(ctx, ctx_config->session_cache_timeout);
+        SSL_CTX_set_session_id_context(ctx, (void *)"kserver", 7);
+    } else {
+        SSL_CTX_set_session_cache_mode(ctx, SSL_SESS_CACHE_OFF);
+    }
+
+#ifdef SSL_OP_NO_CLIENT_RENEGOTIATION
+    SSL_CTX_set_options(ctx, SSL_OP_NO_CLIENT_RENEGOTIATION);
+#endif
+
+    if (ctx_config->prefer_server_ciphers)
+        SSL_CTX_set_options(ctx, SSL_OP_CIPHER_SERVER_PREFERENCE);
+
+#if ((OPENSSL_VERSION_NUMBER < 0x30000000L) && defined(SSL_CTX_set_ecdh_auto))
+    SSL_CTX_set_ecdh_auto(ctx, 1);
+#endif
+    SSL_CTX_set_options(ctx, SSL_OP_SINGLE_DH_USE);
+
+    SSL_CTX_free(tls_ctx);
+    tls_ctx = ctx;
+    return 0;
+    
+error:
+    if (ctx) SSL_CTX_free(ctx);
+    return -1;
 }
