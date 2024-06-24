@@ -327,7 +327,9 @@ server_start(struct server *s) {
 		return -1;
 	}
 
+#ifdef HTTP_SSL
 	s->ssl_ctx = ssl_init(&s->cfg->wbssl);
+#endif
 
 	/*set keepalive socket option to do with half connection*/
 	int keep_alive = 1;

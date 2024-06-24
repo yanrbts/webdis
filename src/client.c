@@ -218,7 +218,11 @@ http_client_new(struct worker *w, int fd, in_addr_t addr) {
 	c->w = w;
 	c->addr = addr;
 	c->s = w->s;
+#ifdef HTTP_SSL
 	c->ssl = SSL_new(w->s->ssl_ctx);
+#else
+	c->ssl = NULL;
+#endif
 
 	/* parser */
 	http_parser_init(&c->parser, HTTP_REQUEST);
