@@ -38,6 +38,7 @@
 #include <sys/uio.h>
 #include <arpa/inet.h>
 #include "conf.h"
+#include "client.h"
 #include "slog.h"
 
 #define WB_TLS_PROTO_TLSv1       (1<<0)
@@ -185,7 +186,7 @@ static void tlsCleanup(void) {
 
 /* Callback for passing a keyfile password stored as an sds to OpenSSL */
 static int tlsPasswordCallback(char *buf, int size, int rwflag, void *u) {
-    UNUSED(rwflag);
+    (void)rwflag;
 
     const char *pass = u;
     size_t pass_len;
@@ -363,11 +364,25 @@ static int parseProtocolsConfig(const char *str) {
  * @reconfigure: if true, ignore the previous configure; if false, only
  * configure from @ctx_config if tls_ctx is NULL.
  */
-static int tlsConfigure(void *priv, int reconfigure) {
+SSL_CTX *ssl_init(void *priv) {
     struct httpssl *ctx_config = (struct httpssl *)priv;
     char errbuf[256];
     SSL_CTX *ctx = NULL;
     int protocols;
+
+    if (tls_ctx) {
+        return tls_ctx;
+    }
+
+    if (!ctx_config->cert_file) {
+        // serverLog(LL_WARNING, "No tls-cert-file configured!");
+        goto error;
+    }
+
+    if (!ctx_config->key_file) {
+        // serverLog(LL_WARNING, "No tls-key-file configured!");
+        goto error;
+    }
 
     protocols = parseProtocolsConfig(ctx_config->protocols);
     if (protocols == -1) goto error;
@@ -463,9 +478,9 @@ static int tlsConfigure(void *priv, int reconfigure) {
 
     SSL_CTX_free(tls_ctx);
     tls_ctx = ctx;
-    return 0;
+    return tls_ctx;
     
 error:
     if (ctx) SSL_CTX_free(ctx);
-    return -1;
+    return NULL;
 }

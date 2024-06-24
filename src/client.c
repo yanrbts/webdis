@@ -6,6 +6,7 @@
 #include "websocket.h"
 #include "cmd.h"
 #include "conf.h"
+#include "tls.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -217,6 +218,7 @@ http_client_new(struct worker *w, int fd, in_addr_t addr) {
 	c->w = w;
 	c->addr = addr;
 	c->s = w->s;
+	c->ssl = SSL_new(w->s->ssl_ctx);
 
 	/* parser */
 	http_parser_init(&c->parser, HTTP_REQUEST);

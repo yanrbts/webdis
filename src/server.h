@@ -9,12 +9,12 @@
 #include <hiredis/hiredis.h>
 #include <hiredis/hiredis_ssl.h>
 #endif
+#include <openssl/ssl.h>
 
 struct worker;
 struct conf;
 
 struct server {
-
 	int fd;
 	struct event ev;
 	struct event_base *base;
@@ -27,6 +27,10 @@ struct server {
 	redisSSLContextError ssl_error;
 #endif
 
+#ifdef HTTP_SSL
+	SSL_CTX *ssl_ctx;
+	char *ssl_ctx_error;
+#endif
 	/* worker threads */
 	struct worker **w;
 	int next_worker;

@@ -2,6 +2,7 @@
 #include "worker.h"
 #include "client.h"
 #include "conf.h"
+#include "tls.h"
 #include "version.h"
 
 #include <stdlib.h>
@@ -325,6 +326,8 @@ server_start(struct server *s) {
 	if(s->fd < 0) {
 		return -1;
 	}
+
+	s->ssl_ctx = ssl_init(&s->cfg->wbssl);
 
 	/*set keepalive socket option to do with half connection*/
 	int keep_alive = 1;

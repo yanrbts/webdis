@@ -2,6 +2,7 @@
 #define CLIENT_H
 
 #include <event.h>
+#include <openssl/ssl.h>
 #include <arpa/inet.h>
 #include "http_parser.h"
 #include "websocket.h"
@@ -66,6 +67,8 @@ struct http_client {
 	struct cmd *last_cmd; /* last command executed, might be in flight */
 
 	struct ws_client *ws; /* websocket client */
+	/* SSL */
+	SSL *ssl;
 };
 
 struct http_client *

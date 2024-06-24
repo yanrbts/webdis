@@ -67,9 +67,26 @@ endif
 CFLAGS += $(DEBUG_FLAGS)
 
 # if `make` is run with SSL=1, include hiredis SSL support
-ifeq ($(SSL),1)
+# ifeq ($(SSL),1)
+# 	HIREDIS_OBJ += src/hiredis/ssl.o
+# 	CFLAGS += -DHAVE_SSL=1
+# 	LDFLAGS +=  -lssl -lcrypto
+# 	ifneq (, $(shell which brew)) # Homebrew
+# 		CFLAGS += -I$(shell brew --prefix)/opt/openssl/include
+# 		LDFLAGS += -L$(shell brew --prefix)/opt/openssl/lib
+# 	endif
+# 	# On Ubuntu and Alpine, LDFLAGS are enough since the SSL headers are under /usr/include/openssl
+# endif
+
+# if `make` is run with SSL=1, include hiredis SSL support
+ifeq ($(filter 1,$(SSL) $(HTTPSSL)),1)
 	HIREDIS_OBJ += src/hiredis/ssl.o
-	CFLAGS += -DHAVE_SSL=1
+	ifeq ($(HTTPSSL),1)
+		CFLAGS += -DHTTP_SSL=1
+	endif
+	ifeq ($(SSL),1)
+		CFLAGS += -DHTTP_SSL=1
+	endif
 	LDFLAGS +=  -lssl -lcrypto
 	ifneq (, $(shell which brew)) # Homebrew
 		CFLAGS += -I$(shell brew --prefix)/opt/openssl/include
@@ -80,7 +97,7 @@ endif
 
 OBJS_DEPS=$(wildcard *.d)
 DEPS=$(FORMAT_OBJS) $(HIREDIS_OBJ) $(JANSSON_OBJ) $(HTTP_PARSER_OBJS) $(B64_OBJS)
-OBJS=src/webdis.o src/cmd.o src/worker.o src/slog.o src/server.o src/acl.o src/md5/md5.o src/sha1/sha1.o src/http.o src/client.o src/websocket.o src/pool.o src/conf.o $(DEPS)
+OBJS=src/webdis.o src/cmd.o src/worker.o src/slog.o src/server.o src/acl.o src/md5/md5.o src/sha1/sha1.o src/http.o src/client.o src/websocket.o src/pool.o src/conf.o src/tls.o $(DEPS)
 
 
 PREFIX ?= /usr/local
