@@ -39,6 +39,7 @@
 #include <arpa/inet.h>
 #include "conf.h"
 #include "client.h"
+#include "tls.h"
 #include "slog.h"
 
 #define WB_TLS_PROTO_TLSv1       (1<<0)
@@ -483,4 +484,64 @@ SSL_CTX *ssl_init(void *priv) {
 error:
     if (ctx) SSL_CTX_free(ctx);
     return NULL;
+}
+
+status ssl_connect(struct http_client *c, char *host) {
+    int r;
+    SSL_set_fd(c->ssl, c->fd);
+    SSL_set_accept_state(c->ssl);
+    SSL_set_tlsext_host_name(c->ssl, host);
+    if ((r = SSL_connect(c->ssl)) != 1) {
+        switch (SSL_get_error(c->ssl, r)) {
+            case SSL_ERROR_WANT_READ:
+                return RETRY;
+            case SSL_ERROR_WANT_WRITE:
+                return RETRY;
+            default:                   
+                return ERROR;
+        }
+    }
+    return OK;
+}
+
+status ssl_close(struct http_client *c) {
+    SSL_shutdown(c->ssl);
+    SSL_clear(c->ssl);
+    return OK;
+}
+
+status ssl_read(struct http_client *c, size_t *n) {
+    int r;
+    if ((r = SSL_read(c->ssl, c->buffer, sizeof(c->buffer))) <= 0) {
+        switch (SSL_get_error(c->ssl, r)) {
+            case SSL_ERROR_WANT_READ:  
+                return RETRY;
+            case SSL_ERROR_WANT_WRITE: 
+                return RETRY;
+            default:
+                return ERROR;
+        }
+    }
+    *n = (size_t)r;
+    return OK;
+}
+
+status ssl_write(struct http_client *c, char *buf, size_t len, size_t *n) {
+    int r;
+    if ((r = SSL_write(c->ssl, buf, len)) <= 0) {
+        switch (SSL_get_error(c->ssl, r)) {
+            case SSL_ERROR_WANT_READ:
+                return RETRY;
+            case SSL_ERROR_WANT_WRITE:
+                return RETRY;
+            default:
+                return ERROR;
+        }
+    }
+    *n = (size_t)r;
+    return OK;
+}
+
+size_t ssl_readable(struct http_client *c) {
+    return SSL_pending(c->ssl);
 }

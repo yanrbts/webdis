@@ -59,10 +59,10 @@ typedef struct ConnectionType {
 } ConnectionType;
 
 SSL_CTX *ssl_init(void *priv);
-// status ssl_connect(connection *, char *);
-// status ssl_close(connection *);
-// status ssl_read(connection *, size_t *);
-// status ssl_write(connection *, char *, size_t, size_t *);
-// size_t ssl_readable(connection *);
+status ssl_connect(struct http_client *c, char *host);
+status ssl_close(struct http_client *c);
+status ssl_read(struct http_client *c, size_t *n);
+status ssl_write(struct http_client *c, char *buf, size_t len, size_t *n);
+size_t ssl_readable(struct http_client *c);
 
 #endif

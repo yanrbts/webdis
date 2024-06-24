@@ -30,7 +30,6 @@ struct http_client {
 	struct worker *w;
 	struct server *s;
 
-
 	/* HTTP parsing */
 	struct http_parser parser;
 	struct http_parser_settings settings;
@@ -69,6 +68,7 @@ struct http_client {
 	struct ws_client *ws; /* websocket client */
 	/* SSL */
 	SSL *ssl;
+	int ssl_handshake_done;
 };
 
 struct http_client *
