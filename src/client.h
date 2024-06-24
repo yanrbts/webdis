@@ -22,7 +22,6 @@ typedef enum {
 } client_error_t;
 
 struct http_client {
-
 	int fd;
 	in_addr_t addr;
 	struct event ev;

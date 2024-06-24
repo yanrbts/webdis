@@ -172,8 +172,10 @@ static void tlsInit(void) {
 }
 
 static void tlsCleanup(void) {
-    SSL_CTX_free(tls_ctx);
-    tls_ctx = NULL;
+    if (tls_ctx) {
+        SSL_CTX_free(tls_ctx);
+        tls_ctx = NULL;
+    }
 
 #if OPENSSL_VERSION_NUMBER >= 0x10100000L && !defined(LIBRESSL_VERSION_NUMBER)
     // unavailable on LibreSSL
@@ -386,7 +388,12 @@ static int tlsConfigure(void *priv, int reconfigure) {
 #ifdef SSL_OP_NO_CLIENT_RENEGOTIATION
     SSL_CTX_set_options(ctx, SSL_OP_NO_CLIENT_RENEGOTIATION);
 #endif
-
+    /* 
+     * When choosing a cipher, use the server's preferences instead of the client preferences. 
+     * When not set, the SSL server will always follow the clients preferences. When set, 
+     * the SSLv3/TLSv1 server will choose following its own preferences. Because of the different protocol, 
+     * for SSLv2 the server will send its list of preferences to the client and the client chooses.
+     */
     if (ctx_config->prefer_server_ciphers)
         SSL_CTX_set_options(ctx, SSL_OP_CIPHER_SERVER_PREFERENCE);
 
@@ -394,6 +401,65 @@ static int tlsConfigure(void *priv, int reconfigure) {
     SSL_CTX_set_ecdh_auto(ctx, 1);
 #endif
     SSL_CTX_set_options(ctx, SSL_OP_SINGLE_DH_USE);
+
+    if (ctx_config->dh_params_file) {
+        FILE *dhfile = fopen(ctx_config->dh_params_file, "r");
+        if (!dhfile) {
+            goto error;
+        }
+
+#if (OPENSSL_VERSION_NUMBER >= 0x30000000L)
+        EVP_PKEY *pkey = NULL;
+        OSSL_DECODER_CTX *dctx = OSSL_DECODER_CTX_new_for_pkey(
+            &pkey, "PEM", NULL, "DH", OSSL_KEYMGMT_SELECT_DOMAIN_PARAMETERS, NULL, NULL);
+        if (!dctx) {
+            fclose(dhfile);
+            goto error;
+        }
+
+        if (!OSSL_DECODER_from_fp(dctx, dhfile)) {
+            OSSL_DECODER_CTX_free(dctx);
+            fclose(dhfile);
+            goto error;
+        }
+
+        OSSL_DECODER_CTX_free(dctx);
+        fclose(dhfile);
+
+        if (SSL_CTX_set0_tmp_dh_pkey(ctx, pkey) <= 0) {
+            ERR_error_string_n(ERR_get_error(), errbuf, sizeof(errbuf));
+            EVP_PKEY_free(pkey);
+            goto error;
+        }
+        /* Not freeing pkey, it is owned by OpenSSL now */
+#else
+        DH *dh = PEM_read_DHparams(dhfile, NULL, NULL, NULL);
+        fclose(dhfile);
+        if (!dh) {
+            // serverLog(LL_WARNING, "%s: failed to read DH params.", ctx_config->dh_params_file);
+            goto error;
+        }
+
+        if (SSL_CTX_set_tmp_dh(ctx, dh) <= 0) {
+            ERR_error_string_n(ERR_get_error(), errbuf, sizeof(errbuf));
+            // serverLog(LL_WARNING, "Failed to load DH params file: %s: %s", ctx_config->dh_params_file, errbuf);
+            DH_free(dh);
+            goto error;
+        }
+
+        DH_free(dh);
+#endif
+    } else {
+#if (OPENSSL_VERSION_NUMBER >= 0x30000000L)
+        SSL_CTX_set_dh_auto(ctx, 1);
+#endif 
+    }
+
+    /* If a client-side certificate is configured, create an explicit client context */
+    if (ctx_config->client_cert_file && ctx_config->client_key_file) {
+        ctx = createSSLContext(ctx_config, protocols, 1);
+        if (!ctx) goto error;
+    }
 
     SSL_CTX_free(tls_ctx);
     tls_ctx = ctx;
