@@ -291,6 +291,29 @@ http_client_free(struct http_client *c) {
 	free(c);
 }
 
+/* 
+ * Process the return code received from OpenSSL>
+ * Update the want parameter with expected I/O.
+ * Update the connection's error state if a real error has occurred.
+ * Returns an SSL error code, or 0 if no further handling is required.
+ */
+static int handleSSLReturnCode(SSL *ssl, int ret_value) {
+	if (ret_value <= 0) {
+		int ssl_err = SSL_get_error(ssl, ret_value);
+		switch (ssl_err) {
+		case SSL_ERROR_WANT_WRITE:
+		case SSL_ERROR_WANT_READ:
+			return 0;
+		case SSL_ERROR_SYSCALL:
+		default:
+			ERR_print_errors_fp(stderr);
+			break;
+		}
+		return ssl_err;
+	}
+	return 0;
+}
+
 int
 http_client_read(struct http_client *c) {
 	char buffer[4096];
@@ -300,10 +323,17 @@ http_client_read(struct http_client *c) {
 	if (c->ssl) {
 		if (!c->ssl_handshake_done) {
 			int ssl_err = SSL_accept(c->ssl);
+			/*if (handleSSLReturnCode(c->ssl, ssl_err) == 0) {
+				slog(c->s, WEBDIS_INFO, "SSL handshake in progress", 0);
+				return 0;
+			}
+			c->ssl_handshake_done = 1;*/
+
 			if (ssl_err <= 0) {
 				int ssl_err_code = SSL_get_error(c->ssl, ssl_err);
 				if (ssl_err_code == SSL_ERROR_WANT_READ || ssl_err_code == SSL_ERROR_WANT_WRITE) {
 					slog(c->s, WEBDIS_INFO, "SSL handshake in progress", 0);
+					// worker_monitor_input(c);
 					return 0;
 				} else {
 					// Handle SSL error
