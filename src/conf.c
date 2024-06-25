@@ -263,6 +263,7 @@ conf_parse_ssl(struct conf *conf, json_t *jssl, const char *filename) {
 #if HTTP_SSL
 void
 conf_parse_httpssl(struct conf *conf, json_t *jssl, const char *filename) {
+	(void)filename;
 	for(void *kv = json_object_iter(jssl); kv; kv = json_object_iter_next(jssl, kv)) {
 		json_t *jtmp = json_object_iter_value(kv);
 		if(strcmp(json_object_iter_key(kv), "cert_file") == 0 && json_typeof(jtmp) == JSON_STRING) {

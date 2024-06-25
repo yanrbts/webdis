@@ -7,6 +7,7 @@
 #include "cmd.h"
 #include "conf.h"
 #include "tls.h"
+#include "slog.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -77,71 +78,71 @@ http_client_on_header_name(struct http_parser *p, const char *at, size_t sz) {
 	return 0;
 }
 
-static char *
-wrap_filename(const char *val, size_t val_len) {
+// static char *
+// wrap_filename(const char *val, size_t val_len) {
 
-	char format[] = "attachment; filename=\"";
-	size_t sz = sizeof(format) - 1 + val_len + 1;
-	char *p = calloc(sz + 1, 1);
+// 	char format[] = "attachment; filename=\"";
+// 	size_t sz = sizeof(format) - 1 + val_len + 1;
+// 	char *p = calloc(sz + 1, 1);
 
-	memcpy(p, format, sizeof(format)-1); /* copy format */
-	memcpy(p + sizeof(format)-1, val, val_len); /* copy filename */
-	p[sz-1] = '"';
+// 	memcpy(p, format, sizeof(format)-1); /* copy format */
+// 	memcpy(p + sizeof(format)-1, val, val_len); /* copy filename */
+// 	p[sz-1] = '"';
 
-	return p;
-}
+// 	return p;
+// }
 
 /*
  * Split query string into key/value pairs, process some of them.
  */
-static int
-http_client_on_query_string(struct http_parser *parser, const char *at, size_t sz) {
+// static int
+// http_client_on_query_string(struct http_parser *parser, const char *at, size_t sz) {
 
-	struct http_client *c = parser->data;
-	const char *p = at;
+// 	struct http_client *c = parser->data;
+// 	const char *p = at;
 
-	while(p < at + sz) {
+// 	while(p < at + sz) {
 
-		const char *key = p, *val;
-		int key_len, val_len;
-		char *eq = memchr(key, '=', sz - (p-at));
-		if(!eq || eq > at + sz) { /* last argument */
-			break;
-		} else { /* found an '=' */
-			char *amp;
-			val = eq + 1;
-			key_len = eq - key;
-			p = eq + 1;
+// 		const char *key = p, *val;
+// 		int key_len, val_len;
+// 		char *eq = memchr(key, '=', sz - (p-at));
+// 		if(!eq || eq > at + sz) { /* last argument */
+// 			break;
+// 		} else { /* found an '=' */
+// 			char *amp;
+// 			val = eq + 1;
+// 			key_len = eq - key;
+// 			p = eq + 1;
 
-			amp = memchr(p, '&', sz - (p-at));
-			if(!amp || amp > at + sz) {
-				val_len = at + sz - p; /* last arg */
-			} else {
-				val_len = amp - val; /* cur arg */
-				p = amp + 1;
-			}
+// 			amp = memchr(p, '&', sz - (p-at));
+// 			if(!amp || amp > at + sz) {
+// 				val_len = at + sz - p; /* last arg */
+// 			} else {
+// 				val_len = amp - val; /* cur arg */
+// 				p = amp + 1;
+// 			}
 
-			if(key_len == 4 && strncmp(key, "type", 4) == 0) {
-				c->type = calloc(1 + val_len, 1);
-				memcpy(c->type, val, val_len);
-			} else if((key_len == 5 && strncmp(key, "jsonp", 5) == 0)
-				|| (key_len == 8 && strncmp(key, "callback", 8) == 0)) {
-				c->jsonp = calloc(1 + val_len, 1);
-				memcpy(c->jsonp, val, val_len);
-			} else if(key_len == 3 && strncmp(key, "sep", 3) == 0) {
-				c->separator = calloc(1 + val_len, 1);
-				memcpy(c->separator, val, val_len);
-			} else if(key_len == 8 && strncmp(key, "filename", 8) == 0) {
-				c->filename = wrap_filename(val, val_len);
-			}
+// 			if(key_len == 4 && strncmp(key, "type", 4) == 0) {
+// 				c->type = calloc(1 + val_len, 1);
+// 				memcpy(c->type, val, val_len);
+// 			} else if((key_len == 5 && strncmp(key, "jsonp", 5) == 0)
+// 				|| (key_len == 8 && strncmp(key, "callback", 8) == 0)) {
+// 				c->jsonp = calloc(1 + val_len, 1);
+// 				memcpy(c->jsonp, val, val_len);
+// 			} else if(key_len == 3 && strncmp(key, "sep", 3) == 0) {
+// 				c->separator = calloc(1 + val_len, 1);
+// 				memcpy(c->separator, val, val_len);
+// 			} else if(key_len == 8 && strncmp(key, "filename", 8) == 0) {
+// 				c->filename = wrap_filename(val, val_len);
+// 			}
 
-			if(!amp) {
-				break;
-			}
-		}
-	}
-	return 0;
-}
+// 			if(!amp) {
+// 				break;
+// 			}
+// 		}
+// 	}
+// 	return 0;
+// }
 
 static int
 http_client_on_header_value(struct http_parser *p, const char *at, size_t sz) {
@@ -281,6 +282,7 @@ http_client_free(struct http_client *c) {
 	if (c->ssl) {
         SSL_shutdown(c->ssl);
         SSL_free(c->ssl);
+		c->ssl_handshake_done = 0;
     }
 #endif
 
@@ -301,12 +303,9 @@ http_client_read(struct http_client *c) {
 			if (ssl_err <= 0) {
 				int ssl_err_code = SSL_get_error(c->ssl, ssl_err);
 				if (ssl_err_code == SSL_ERROR_WANT_READ || ssl_err_code == SSL_ERROR_WANT_WRITE) {
-					printf("ssl error\n");
-					fflush(stdout);
+					slog(c->s, WEBDIS_INFO, "SSL handshake in progress", 0);
 					return 0;
 				} else {
-					printf("ssl error %d\n", ssl_err_code);
-					fflush(stdout);
 					// Handle SSL error
                     ERR_print_errors_fp(stderr);
                     return 0;
@@ -317,8 +316,8 @@ http_client_read(struct http_client *c) {
 		}
 		ret = SSL_read(c->ssl, buffer, sizeof(buffer));
 	} else {
-		printf("ssl = NULL\n");
-		fflush(stdout);
+		slog(c->s, WEBDIS_ERROR, "SSL invalid", 0);
+		return 0;
 	}
 #else
 	ret = read(c->fd, buffer, sizeof(buffer));
