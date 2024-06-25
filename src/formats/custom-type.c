@@ -2,6 +2,7 @@
 #include "cmd.h"
 #include "common.h"
 #include "http.h"
+#include "client.h"
 
 #include <string.h>
 #include <hiredis/hiredis.h>
@@ -63,6 +64,9 @@ custom_type_reply(redisAsyncContext *c, void *r, void *privdata) {
 
 	/* couldn't make sense of what the client wanted. */
 	resp = http_response_init(cmd->w, 400, "Bad Request");
+#ifdef HTTP_SSL
+	resp->ssl = cmd->http_client->ssl;
+#endif
 	http_response_set_header(resp, "Content-Length", "0", HEADER_COPY_NONE);
 	http_response_set_keep_alive(resp, cmd->keep_alive);
 	http_response_write(resp, cmd->fd);

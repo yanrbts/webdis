@@ -19,8 +19,11 @@ static struct acl *
 conf_parse_acls(json_t *jtab);
 
 #if HAVE_SSL
-void
-conf_parse_ssl(struct conf *conf, json_t *jssl, const char *filename);
+void conf_parse_ssl(struct conf *conf, json_t *jssl, const char *filename);
+#endif
+
+#if HTTP_SSL
+void conf_parse_httpssl(struct conf *conf, json_t *jssl, const char *filename);
 #endif
 
 #define ACL_ERROR_PREFIX "Config error with 'redis_auth': "
@@ -216,6 +219,10 @@ conf_read(const char *filename) {
 		} else if(strcmp(json_object_iter_key(kv), "ssl") == 0 && json_typeof(jtmp) == JSON_OBJECT) {
 			conf_parse_ssl(conf, jtmp, filename);
 #endif
+#if HTTP_SSL
+		} else if(strcmp(json_object_iter_key(kv), "httpssl") == 0 && json_typeof(jtmp) == JSON_OBJECT) {
+			conf_parse_httpssl(conf, jtmp, filename);
+#endif
 		} else if(strcmp(json_object_iter_key(kv), "hiredis") == 0 && json_typeof(jtmp) == JSON_OBJECT) {
 			conf_parse_hiredis(conf, jtmp);
 		} else {
@@ -248,6 +255,24 @@ conf_parse_ssl(struct conf *conf, json_t *jssl, const char *filename) {
 		} else {
 			fprintf(stderr, "Warning! Unexpected key or incorrect value under 'ssl', in %s: '%s'\n",
 				filename, json_object_iter_key(kv));
+		}
+	}
+}
+#endif
+
+#if HTTP_SSL
+void
+conf_parse_httpssl(struct conf *conf, json_t *jssl, const char *filename) {
+	for(void *kv = json_object_iter(jssl); kv; kv = json_object_iter_next(jssl, kv)) {
+		json_t *jtmp = json_object_iter_value(kv);
+		if(strcmp(json_object_iter_key(kv), "cert_file") == 0 && json_typeof(jtmp) == JSON_STRING) {
+			conf->wbssl.cert_file = conf_string_or_envvar(json_string_value(jtmp));
+		} else if(strcmp(json_object_iter_key(kv), "key_file") == 0 && json_typeof(jtmp) == JSON_STRING) {
+			conf->wbssl.key_file = conf_string_or_envvar(json_string_value(jtmp));
+		} else if(strcmp(json_object_iter_key(kv), "protocols") == 0 && json_typeof(jtmp) == JSON_STRING) {
+			conf->wbssl.protocols = conf_string_or_envvar(json_string_value(jtmp));
+		} else if(strcmp(json_object_iter_key(kv), "ca_cert_file") == 0 && json_typeof(jtmp) == JSON_STRING) {
+			conf->wbssl.ca_cert_file = conf_string_or_envvar(json_string_value(jtmp));
 		}
 	}
 }

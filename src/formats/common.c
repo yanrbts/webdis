@@ -43,6 +43,9 @@ format_send_error(struct cmd *cmd, short code, const char *msg) {
 
 	if(!cmd->is_websocket && !cmd->pub_sub_client) {
 		resp = http_response_init(cmd->w, code, msg);
+#ifdef HTTP_SSL
+		resp->ssl = cmd->http_client->ssl;
+#endif
 		resp->http_version = cmd->http_version;
 		http_response_set_keep_alive(resp, cmd->keep_alive);
 		http_response_write(resp, cmd->fd);
@@ -83,6 +86,9 @@ format_send_reply(struct cmd *cmd, const char *p, size_t sz, const char *content
 		if(cmd->started_responding == 0) {
 			cmd->started_responding = 1;
 			resp = http_response_init(cmd->w, 200, "OK");
+#ifdef HTTP_SSL
+			resp->ssl = cmd->http_client->ssl;
+#endif
 			resp->http_version = cmd->http_version;
 			if(cmd->filename) {
 				http_response_set_header(resp, "Content-Disposition", cmd->filename, HEADER_COPY_VALUE);
@@ -94,7 +100,7 @@ format_send_reply(struct cmd *cmd, const char *p, size_t sz, const char *content
 			http_response_write(resp, cmd->fd);
 		} else {
 			/* Asynchronous chunk write. */
-			http_response_write_chunk(cmd->fd, cmd->w, p, sz);
+			http_response_write_chunk(cmd, cmd->w, p, sz);
 		}
 
 	} else {
@@ -115,6 +121,9 @@ format_send_reply(struct cmd *cmd, const char *p, size_t sz, const char *content
 				http_response_set_header(resp, "ETag", etag, HEADER_COPY_VALUE);
 				http_response_set_body(resp, p, sz);
 			}
+#ifdef HTTP_SSL
+			resp->ssl = cmd->http_client->ssl;
+#endif
 			resp->http_version = cmd->http_version;
 			http_response_set_keep_alive(resp, cmd->keep_alive);
 			http_response_write(resp, cmd->fd);

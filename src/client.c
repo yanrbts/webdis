@@ -218,10 +218,11 @@ http_client_new(struct worker *w, int fd, in_addr_t addr) {
 	c->w = w;
 	c->addr = addr;
 	c->s = w->s;
+
 #ifdef HTTP_SSL
 	c->ssl = SSL_new(w->s->ssl_ctx);
-#else
-	c->ssl = NULL;
+	SSL_set_fd(c->ssl, c->fd);
+	c->ssl_handshake_done = 0;
 #endif
 
 	/* parser */
@@ -276,6 +277,12 @@ http_client_reset(struct http_client *c) {
 
 void
 http_client_free(struct http_client *c) {
+#ifdef HTTP_SSL
+	if (c->ssl) {
+        SSL_shutdown(c->ssl);
+        SSL_free(c->ssl);
+    }
+#endif
 
 	http_client_reset(c);
 	free(c->buffer);
@@ -284,11 +291,39 @@ http_client_free(struct http_client *c) {
 
 int
 http_client_read(struct http_client *c) {
-
 	char buffer[4096];
 	int ret;
 
+#ifdef HTTP_SSL
+	if (c->ssl) {
+		if (!c->ssl_handshake_done) {
+			int ssl_err = SSL_accept(c->ssl);
+			if (ssl_err <= 0) {
+				int ssl_err_code = SSL_get_error(c->ssl, ssl_err);
+				if (ssl_err_code == SSL_ERROR_WANT_READ || ssl_err_code == SSL_ERROR_WANT_WRITE) {
+					printf("ssl error\n");
+					fflush(stdout);
+					return 0;
+				} else {
+					printf("ssl error %d\n", ssl_err_code);
+					fflush(stdout);
+					// Handle SSL error
+                    ERR_print_errors_fp(stderr);
+                    return 0;
+				}
+			} else {
+				c->ssl_handshake_done = 1;
+			}
+		}
+		ret = SSL_read(c->ssl, buffer, sizeof(buffer));
+	} else {
+		printf("ssl = NULL\n");
+		fflush(stdout);
+	}
+#else
 	ret = read(c->fd, buffer, sizeof(buffer));
+#endif
+
 	if(ret <= 0) {
 		/* broken link, free buffer and client object */
 

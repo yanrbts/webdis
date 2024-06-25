@@ -25,22 +25,12 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-#include <string.h>
-#include <strings.h>
-#include <openssl/conf.h>
-#include <openssl/ssl.h>
-#include <openssl/err.h>
-#include <openssl/rand.h>
-#include <openssl/pem.h>
-#if OPENSSL_VERSION_NUMBER >= 0x30000000L
-#include <openssl/decoder.h>
-#endif
-#include <sys/uio.h>
-#include <arpa/inet.h>
 #include "conf.h"
 #include "client.h"
 #include "tls.h"
 #include "slog.h"
+
+#ifdef HTTP_SSL
 
 #define WB_TLS_PROTO_TLSv1       (1<<0)
 #define WB_TLS_PROTO_TLSv1_1     (1<<1)
@@ -154,7 +144,7 @@ void sfreesplitres(char **tokens, int count) {
     free(tokens);
 }
 
-static void tlsInit(void) {
+void ssl_init(void) {
     /* 
      * Enable configuring OpenSSL using the standard openssl.cnf
      * OPENSSL_config()/OPENSSL_init_crypto() should be the first 
@@ -173,7 +163,7 @@ static void tlsInit(void) {
 #endif
 }
 
-static void tlsCleanup(void) {
+void ssl_cleanup(void) {
     if (tls_ctx) {
         SSL_CTX_free(tls_ctx);
         tls_ctx = NULL;
@@ -365,7 +355,7 @@ static int parseProtocolsConfig(const char *str) {
  * @reconfigure: if true, ignore the previous configure; if false, only
  * configure from @ctx_config if tls_ctx is NULL.
  */
-SSL_CTX *ssl_init(void *priv) {
+SSL_CTX *ssl_creat_ctx(void *priv) {
     struct httpssl *ctx_config = (struct httpssl *)priv;
     char errbuf[256];
     SSL_CTX *ctx = NULL;
@@ -545,3 +535,5 @@ status ssl_write(struct http_client *c, char *buf, size_t len, size_t *n) {
 size_t ssl_readable(struct http_client *c) {
     return SSL_pending(c->ssl);
 }
+
+#endif

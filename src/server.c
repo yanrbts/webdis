@@ -147,6 +147,10 @@ server_new(const char *cfg_file) {
 	}
 #endif
 
+#ifdef HTTP_SSL
+	ssl_init();
+#endif
+
 	/* workers */
 	s->w = calloc(s->cfg->http_threads, sizeof(struct worker*));
 	for(i = 0; i < s->cfg->http_threads; ++i) {
@@ -274,6 +278,9 @@ server_handle_signal(int id) {
 			(void)ret;
 			close(__server->log.fd);
 			server_stop(__server);
+#ifdef HTTP_SSL
+			ssl_cleanup();
+#endif
 			exit(0);
 			break;
 		default:
@@ -328,7 +335,7 @@ server_start(struct server *s) {
 	}
 
 #ifdef HTTP_SSL
-	s->ssl_ctx = ssl_init(&s->cfg->wbssl);
+	s->ssl_ctx = ssl_creat_ctx(&s->cfg->wbssl);
 #endif
 
 	/*set keepalive socket option to do with half connection*/
@@ -351,6 +358,9 @@ server_start(struct server *s) {
 	slog(s, WEBDIS_INFO, "Webdis " WEBDIS_VERSION " up and running", 0);
 	event_base_dispatch(s->base);
 	event_base_free(s->base);
+#ifdef HTTP_SSL
+	ssl_cleanup();
+#endif
 	return 0;
 }
 

@@ -7,4 +7,12 @@ websocket
 pubsub
 *.d
 *.data
+*.pem
+*.crt
+*.csr
+*.key
+*.orig
+*.ext
+*.srl
+*.pfx
 __pycache__/

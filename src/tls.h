@@ -28,6 +28,7 @@
 #ifndef __TLS__
 #define __TLS__
 
+#ifdef HTTP_SSL
 #include <string.h>
 #include <strings.h>
 #include <openssl/conf.h>
@@ -49,20 +50,16 @@ typedef enum {
     RETRY
 } status;
 
-typedef struct ConnectionType {
-    void (*cleanup)(void);
-    void (*shutdown)(struct http_client *conn);
-    void (*close)(struct http_client *conn);
-    /* IO */
-    int (*write)(struct http_client *conn, const void *data, size_t data_len);
-    int (*read)(struct http_client *conn, void *buf, size_t buf_len);
-} ConnectionType;
+void ssl_init(void);
+SSL_CTX *ssl_creat_ctx(void *priv);
+void ssl_cleanup(void);
 
-SSL_CTX *ssl_init(void *priv);
 status ssl_connect(struct http_client *c, char *host);
 status ssl_close(struct http_client *c);
 status ssl_read(struct http_client *c, size_t *n);
 status ssl_write(struct http_client *c, char *buf, size_t len, size_t *n);
 size_t ssl_readable(struct http_client *c);
+
+#endif
 
 #endif

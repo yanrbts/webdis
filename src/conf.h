@@ -86,7 +86,9 @@ struct conf {
 		char *redis_sni;       /* Server name to request (SNI), optional */
 	} ssl;
 #endif
+#ifdef HTTP_SSL
 	struct httpssl wbssl;
+#endif
 	/* Request to serve on “/” */
 	char *default_root;
 };

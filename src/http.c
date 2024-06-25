@@ -3,6 +3,7 @@
 #include "worker.h"
 #include "client.h"
 #include "slog.h"
+#include "cmd.h"
 
 #include <string.h>
 #include <strings.h>
@@ -22,7 +23,6 @@ http_response_allocate_headers(struct http_response *r) {
 
 struct http_response *
 http_response_init(struct worker *w, int code, const char *msg) {
-
 	/* create object */
 	struct http_response *r = calloc(1, sizeof(struct http_response));
 	if(!r) {
@@ -158,14 +158,18 @@ http_response_set_body(struct http_response *r, const char *body, size_t body_le
 
 static void
 http_response_cleanup(struct http_response *r, int fd, int success) {
-
 	int i;
 
 	/* cleanup buffer */
 	free(r->out);
 	if((!r->keep_alive || !success) && fd > 0) {
 		/* Close fd is client doesn't support Keep-Alive. */
+#ifdef HTTPSSL
+		SSL_shutdown(r->ssl);
+		SSL_clear(r->ssl);
+#else
 		close(fd);
+#endif
 	}
 
 	/* cleanup response object */
@@ -185,8 +189,11 @@ http_can_write(int fd, short event, void *p) {
 	struct http_response *r = p;
 
 	(void)event;
-
+#ifdef HTTP_SSL
+	ret = SSL_write(r->ssl, r->out + r->sent, r->out_sz - r->sent);
+#else
 	ret = write(fd, r->out + r->sent, r->out_sz - r->sent);
+#endif
 
 	if(ret > 0)
 		r->sent += ret;
@@ -212,7 +219,6 @@ http_schedule_write(int fd, struct http_response *r) {
 	} else { /* blocking */
 		http_can_write(fd, 0, r);
 	}
-
 }
 
 static char *
@@ -351,6 +357,9 @@ void
 http_send_error(struct http_client *c, short code, const char *msg) {
 
 	struct http_response *resp = http_response_init(NULL, code, msg);
+#ifdef HTTP_SSL
+	resp->ssl = c->ssl;
+#endif
 	resp->http_version = c->http_version;
 	http_response_set_connection_header(c, resp);
 	http_response_set_body(resp, NULL, 0);
@@ -377,6 +386,9 @@ void
 http_send_options(struct http_client *c) {
 
 	struct http_response *resp = http_response_init(NULL, 200, "OK");
+#ifdef HTTP_SSL
+	resp->ssl = c->ssl;
+#endif
 	resp->http_version = c->http_version;
 	http_response_set_connection_header(c, resp);
 
@@ -391,15 +403,18 @@ http_send_options(struct http_client *c) {
  * Write HTTP chunk.
  */
 void
-http_response_write_chunk(int fd, struct worker *w, const char *p, size_t sz) {
+http_response_write_chunk(struct cmd *cmd, struct worker *w, const char *p, size_t sz) {
 
 	struct http_response *r = http_response_init(w, 0, NULL);
+#ifdef HTTP_SSL
+	r->ssl = cmd->http_client->ssl;
+#endif
 	r->keep_alive = 1; /* chunks are always keep-alive */
 
 	/* format packet */
 	r->out = format_chunk(p, sz, &r->out_sz);
 
 	/* send async write */
-	http_schedule_write(fd, r);
+	http_schedule_write(cmd->fd, r);
 }
 

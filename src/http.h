@@ -3,9 +3,13 @@
 
 #include <sys/types.h>
 #include <event.h>
+#ifdef HTTP_SSL
+#include <openssl/ssl.h>
+#endif
 
 struct http_client;
 struct worker;
+struct cmd;
 
 /* bit flags */
 typedef enum {
@@ -25,9 +29,7 @@ struct http_header {
 	header_copy copy;
 };
 
-
 struct http_response {
-
 	struct event ev;
 
 	short code;
@@ -49,6 +51,9 @@ struct http_response {
 	int sent;
 
 	struct worker *w;
+#ifdef HTTP_SSL
+	SSL *ssl;
+#endif
 };
 
 /* HTTP response */
@@ -81,7 +86,7 @@ void
 http_send_options(struct http_client *c);
 
 void
-http_response_write_chunk(int fd, struct worker *w, const char *p, size_t sz);
+http_response_write_chunk(struct cmd *cmd, struct worker *w, const char *p, size_t sz);
 
 void
 http_response_set_keep_alive(struct http_response *r, int enabled);

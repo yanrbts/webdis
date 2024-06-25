@@ -67,8 +67,10 @@ struct http_client {
 
 	struct ws_client *ws; /* websocket client */
 	/* SSL */
+#ifdef HTTP_SSL
 	SSL *ssl;
 	int ssl_handshake_done;
+#endif
 };
 
 struct http_client *

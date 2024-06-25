@@ -28,5 +28,12 @@
     "keep_alive_sec": 15
   },
 
-  "verbosity": 4
+  "verbosity": 4,
+
+  "httpssl": {
+    "cert_file": "./cert/server.pem",
+    "key_file": "./cert/server.key",
+    "ca_cert_file": "./cert/rootCA.pem",
+    "protocols": "tlsv1.2 tlsv1.3"
+  }
 }
