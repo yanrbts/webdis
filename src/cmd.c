@@ -386,11 +386,15 @@ static struct apientry apis[] = {
 	}
 };
 
+/* Define it as a static variable and calculate it only once, 
+ * which can improve performance to a certain extent.*/
+static int apinum = sizeof(apis) / sizeof(struct apientry);
+
 static struct apientry *getApiFunc(const char *uri) {
     int i;
-    int num = sizeof(apis) / sizeof(struct apientry);
+    // int num = sizeof(apis) / sizeof(struct apientry);
 
-    for (i = 0; i < num; i++) {
+    for (i = 0; i < apinum; i++) {
         struct apientry *api = apis + i;
         if (strcmp(uri, api->uri) == 0)
             return api;
