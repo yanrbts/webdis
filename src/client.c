@@ -342,12 +342,6 @@ http_client_read(struct http_client *c) {
 	if (c->ssl) {
 		if (!c->ssl_handshake_done) {
 			int ssl_err = SSL_accept(c->ssl);
-			/*if (handleSSLReturnCode(c->ssl, ssl_err) == 0) {
-				slog(c->s, WEBDIS_INFO, "SSL handshake in progress", 0);
-				return 0;
-			}
-			c->ssl_handshake_done = 1;*/
-
 			if (ssl_err <= 0) {
 				if (handle_SSL_returncode(c, ssl_err) == 0) {
 					/* 

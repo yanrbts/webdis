@@ -33,7 +33,8 @@ pool_free(struct pool *p) {
 		return;
 	
 	for (i = 0; i < p->count; i++) {
-		redisAsyncFree((redisAsyncContext*)p->ac[i]);
+		if (p->ac[i])
+			redisAsyncFree((redisAsyncContext*)p->ac[i]);
 	}
 
 	free(p->ac);
