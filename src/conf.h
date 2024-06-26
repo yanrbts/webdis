@@ -11,6 +11,7 @@ struct auth {
 	char *password;
 };
 
+#ifdef HTTP_SSL
 struct httpssl {
 	char *cert_file;                /* Server side and optionally client side cert file name */
 	char *key_file;                 /* Private key filename for cert_file */
@@ -29,6 +30,7 @@ struct httpssl {
 	int session_cache_size;
 	int session_cache_timeout;
 };
+#endif
 
 struct conf {
 	/* connection to Redis */

@@ -261,9 +261,30 @@ conf_parse_ssl(struct conf *conf, json_t *jssl, const char *filename) {
 #endif
 
 #if HTTP_SSL
+
+static void conf_free_httpssl(struct httpssl *s) {
+	if (s) {
+		if (s->cert_file) free(s->cert_file);
+		if (s->key_file) free(s->key_file);
+		if (s->key_file_pass) free(s->key_file_pass);
+		if (s->client_cert_file) free(s->client_cert_file);
+		if (s->client_key_file) free(s->client_key_file);
+		if (s->client_key_file_pass) free(s->client_key_file_pass);
+		if (s->dh_params_file) free(s->dh_params_file);
+		if (s->ca_cert_file) free(s->ca_cert_file);
+		if (s->ca_cert_dir) free(s->ca_cert_dir);
+		if (s->protocols) free(s->protocols);
+		if (s->ciphers) free(s->ciphers);
+		if (s->ciphersuites) free(s->ciphersuites);
+	}
+}
+
 void
 conf_parse_httpssl(struct conf *conf, json_t *jssl, const char *filename) {
 	(void)filename;
+
+	memset(&conf->wbssl, 0, sizeof(struct httpssl));
+
 	for(void *kv = json_object_iter(jssl); kv; kv = json_object_iter_next(jssl, kv)) {
 		json_t *jtmp = json_object_iter_value(kv);
 		if(strcmp(json_object_iter_key(kv), "cert_file") == 0 && json_typeof(jtmp) == JSON_STRING) {
@@ -433,6 +454,9 @@ conf_free(struct conf *conf) {
 	free(conf->http_host);
 	free(conf->logfile);
 	conf_free_acls(conf->perms);
+#ifdef HTTP_SSL
+	conf_free_httpssl(&conf->wbssl);
+#endif
 	free(conf);
 }
 

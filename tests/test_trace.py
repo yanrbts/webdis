@@ -89,9 +89,9 @@ def gettraces():
 
     while True:
         response =  gettracespage(page)
+        # print('Response:', response)
         page = response["page"]
         if page != 0:
-            # print('Response:', response)
             n = len(response['traces'])
             print(f"Number of traces: {n}")
         else:
@@ -100,7 +100,7 @@ def gettraces():
             break
 
 if __name__ == "__main__":
-    # setfile()
-    # for _ in range(30):
-    #     settrace()
+    setfile()
+    for _ in range(30):
+        settrace()
     gettraces()

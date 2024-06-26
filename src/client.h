@@ -69,6 +69,7 @@ struct http_client {
 	/* SSL */
 #ifdef HTTP_SSL
 	SSL *ssl;
+	char *ssl_error;
 	int ssl_handshake_done;
 #endif
 };

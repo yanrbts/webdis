@@ -711,9 +711,12 @@ int json_traceset_parser(const char *buf, size_t len, struct server *s, struct r
 	r->param.tset.fileuuid = strdup(json_string_value(uuid));
 	snprintf(buffer, sizeof(buffer), "trace:%lld", ustime());
 	r->param.tset.traceid = strdup(buffer);
-	r->param.tset.data = strdup(json_string_output(root, NULL));
+
+	char *jstr = json_string_output(root, NULL);
+	r->param.tset.data = strdup(jstr);
 
 	ret = 0;
+	if (jstr) free(jstr);
 	json_decref(root);
 end:
 	return ret;
