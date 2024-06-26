@@ -45,16 +45,17 @@ worker_free(struct worker *w) {
 	 * state and type.*/
 	pthread_cancel(w->thread);
 	event_base_loopexit(w->base, &tv);
+	// event_base_loopbreak(w->base);
 	/* Wait for the child thread to end */
 	pthread_join(w->thread, NULL);
-	
+	close(w->link[0]);
+	close(w->link[1]);
 	pool_free(w->pool);
 	free(w);
 }
 
 void
 worker_can_read(int fd, short event, void *p) {
-
 	struct http_client *c = p;
 	int ret, nparsed;
 
@@ -148,7 +149,6 @@ worker_monitor_input(struct http_client *c) {
  */
 static void
 worker_on_new_client(int pipefd, short event, void *ptr) {
-
 	struct http_client *c;
 	unsigned long addr;
 
@@ -159,7 +159,6 @@ worker_on_new_client(int pipefd, short event, void *ptr) {
 	int ret = read(pipefd, &addr, sizeof(addr));
 	if(ret == sizeof(addr)) {
 		c = (struct http_client*)addr;
-
 		/* monitor client for input */
 		worker_monitor_input(c);
 	}
@@ -176,7 +175,6 @@ worker_pool_connect(struct worker *w) {
 
 static void*
 worker_main(void *p) {
-
 	struct worker *w = p;
 	struct event ev;
 
@@ -206,6 +204,8 @@ worker_main(void *p) {
 
 	event_del(&ev);
 	event_base_free(w->base);
+	w->base = NULL;
+
 	return NULL;
 }
 

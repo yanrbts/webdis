@@ -224,6 +224,7 @@ http_client_new(struct worker *w, int fd, in_addr_t addr) {
 	c->ssl = SSL_new(w->s->ssl_ctx);
 	SSL_set_fd(c->ssl, c->fd);
 	c->ssl_handshake_done = 0;
+	c->ssl_error = NULL;
 #endif
 
 	/* parser */
@@ -283,6 +284,10 @@ http_client_free(struct http_client *c) {
         SSL_shutdown(c->ssl);
         SSL_free(c->ssl);
 		c->ssl_handshake_done = 0;
+		if (c->ssl_error) {
+			free(c->ssl_error);
+			c->ssl_error = NULL;
+		}
     }
 #endif
 
@@ -291,33 +296,47 @@ http_client_free(struct http_client *c) {
 	free(c);
 }
 
+#ifdef HTTP_SSL
+/* Fetch the latest OpenSSL error and store it in the connection */
+static void updateTLSError(struct http_client *c) {
+    if (c->ssl_error) 
+		free(c->ssl_error);
+    c->ssl_error = malloc(512);
+    ERR_error_string_n(ERR_get_error(), c->ssl_error, 512);
+}
+
 /* 
  * Process the return code received from OpenSSL>
  * Update the want parameter with expected I/O.
  * Update the connection's error state if a real error has occurred.
  * Returns an SSL error code, or 0 if no further handling is required.
  */
-static int handleSSLReturnCode(SSL *ssl, int ret_value) {
+static int
+handle_SSL_returncode(struct http_client *c, int ret_value) {
 	if (ret_value <= 0) {
-		int ssl_err = SSL_get_error(ssl, ret_value);
+		int ssl_err = SSL_get_error(c->ssl, ret_value);
 		switch (ssl_err) {
 		case SSL_ERROR_WANT_WRITE:
 		case SSL_ERROR_WANT_READ:
 			return 0;
 		case SSL_ERROR_SYSCALL:
+			if (c->ssl_error) free(c->ssl_error);
+			c->ssl_error = errno ? strdup(strerror(errno)) : NULL;
+			break;
 		default:
-			ERR_print_errors_fp(stderr);
+			updateTLSError(c);
 			break;
 		}
 		return ssl_err;
 	}
 	return 0;
 }
+#endif
 
 int
 http_client_read(struct http_client *c) {
 	char buffer[4096];
-	int ret;
+	int ret = 0;
 
 #ifdef HTTP_SSL
 	if (c->ssl) {
@@ -330,24 +349,42 @@ http_client_read(struct http_client *c) {
 			c->ssl_handshake_done = 1;*/
 
 			if (ssl_err <= 0) {
-				int ssl_err_code = SSL_get_error(c->ssl, ssl_err);
-				if (ssl_err_code == SSL_ERROR_WANT_READ || ssl_err_code == SSL_ERROR_WANT_WRITE) {
-					slog(c->s, WEBDIS_INFO, "SSL handshake in progress", 0);
-					// worker_monitor_input(c);
+				if (handle_SSL_returncode(c, ssl_err) == 0) {
+					/* 
+					 * Here is the SSL handshake in progress, 
+					 * return 0 to continue waiting, the link 
+					 * cannot be closed directly
+					 */
 					return 0;
 				} else {
 					// Handle SSL error
-                    ERR_print_errors_fp(stderr);
-                    return 0;
+					if (c->ssl_error) {
+						slog(c->s, WEBDIS_ERROR, c->ssl_error, 0);
+						free(c->ssl_error);
+						c->ssl_error = NULL;
+					}
 				}
 			} else {
 				c->ssl_handshake_done = 1;
 			}
 		}
+
 		ret = SSL_read(c->ssl, buffer, sizeof(buffer));
+		if (ret <= 0) {
+			if (handle_SSL_returncode(c, ret) == 0) {
+				return 0;
+			} else {
+				if (c->ssl_error) {
+					slog(c->s, WEBDIS_ERROR, c->ssl_error, 0);
+					free(c->ssl_error);
+					c->ssl_error = NULL;
+				}
+			}
+		}
 	} else {
+		/* If the SSL object is not created, the connection 
+		 * fails and the connection is closed directly */
 		slog(c->s, WEBDIS_ERROR, "SSL invalid", 0);
-		return 0;
 	}
 #else
 	ret = read(c->fd, buffer, sizeof(buffer));
@@ -375,7 +412,6 @@ http_client_read(struct http_client *c) {
 			c->last_cmd->http_client = NULL;
 			c->last_cmd = NULL;
 		}
-
 		close(c->fd);
 
 		http_client_free(c);

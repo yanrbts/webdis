@@ -167,9 +167,9 @@ http_response_cleanup(struct http_response *r, int fd, int success) {
 #ifdef HTTPSSL
 		SSL_shutdown(r->ssl);
 		SSL_clear(r->ssl);
-#else
-		close(fd);
 #endif
+		close(fd);
+
 	}
 
 	/* cleanup response object */
@@ -241,7 +241,6 @@ format_chunk(const char *p, size_t sz, size_t *out_sz) {
 
 void
 http_response_write(struct http_response *r, int fd) {
-
 	char *p;
 	int i, ret;
 
@@ -355,7 +354,6 @@ http_crossdomain(struct http_client *c) {
 /* Simple error response */
 void
 http_send_error(struct http_client *c, short code, const char *msg) {
-
 	struct http_response *resp = http_response_init(NULL, code, msg);
 #ifdef HTTP_SSL
 	resp->ssl = c->ssl;

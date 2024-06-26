@@ -5,9 +5,9 @@ class UserBehavior(TaskSet):
     @task
     def test_post(self):
         self.client.post("/fileset", json={
-            "filename": "file1",
-            "uuid": "file1uuid",
-            "filepath": "/path/to/file1.txt",
+            "filename": "file100",
+            "uuid": "fileuuid100",
+            "filepath": "/path/to/file100.txt",
             "machine": "f526255265340d994510f8d1652e1eb1"
         })
 
