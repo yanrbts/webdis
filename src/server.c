@@ -88,7 +88,7 @@ socket_setup(struct server *s, const char *ip, int port) {
 		int port_num = ntohs(addr.sin_port);
 
 		len = snprintf(buffer, sizeof(buffer), 
-					"Webdis listening on port %d",
+					"Kserver listening on port %d",
 					port_num);
 		if (len < 0) {
 			/* len < 0 */
@@ -169,10 +169,8 @@ server_stop(struct server *s) {
 		worker_free(s->w[i]);
 	}
 	free(s->w);
-	// event_free(&s->ev);
 	pthread_mutex_destroy(&s->auth_log_mutex);
 	conf_free(s->cfg);
-
 	free(s);
 }
 
@@ -273,7 +271,7 @@ server_handle_signal(int id) {
 			break;
 		case SIGTERM:
 		case SIGINT:
-			slog(__server, WEBDIS_INFO, "Webdis terminating", 0);
+			slog(__server, WEBDIS_INFO, "Kserver terminating", 0);
 			ret = fsync(__server->log.fd);
 			(void)ret;
 			close(__server->log.fd);
@@ -355,7 +353,7 @@ server_start(struct server *s) {
 	/* initialize fsync timer once libevent is set up */
 	slog_fsync_init(s);
 
-	slog(s, WEBDIS_INFO, "Webdis " WEBDIS_VERSION " up and running", 0);
+	slog(s, WEBDIS_INFO, "Kserver " WEBDIS_VERSION " up and running", 0);
 	event_base_dispatch(s->base);
 	event_base_free(s->base);
 #ifdef HTTP_SSL
