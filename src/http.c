@@ -336,6 +336,9 @@ void
 http_crossdomain(struct http_client *c) {
 
 	struct http_response *resp = http_response_init(NULL, 200, "OK");
+#ifdef HTTP_SSL
+	resp->ssl = c->ssl;
+#endif
 	char out[] = "<?xml version=\"1.0\"?>\n"
 "<!DOCTYPE cross-domain-policy SYSTEM \"http://www.macromedia.com/xml/dtds/cross-domain-policy.dtd\">\n"
 "<cross-domain-policy>\n"

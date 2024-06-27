@@ -72,7 +72,7 @@ worker_can_read(int fd, short event, void *p) {
 			return;
 		}
 	}
-
+	printf("ret = %d %s\n", ret, c->buffer);
 	if(!c->is_websocket) {
 		/* run parser */
 		nparsed = http_client_execute(c);

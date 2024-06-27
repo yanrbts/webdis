@@ -222,7 +222,29 @@ http_client_new(struct worker *w, int fd, in_addr_t addr) {
 
 #ifdef HTTP_SSL
 	c->ssl = SSL_new(w->s->ssl_ctx);
+	/* SSL_set_verify() sets the verification flags for ssl to be mode and specifies 
+	 * the verify_callback function to be used. If no callback function shall be specified, 
+	 * the NULL pointer can be used for verify_callback. In this case last verify_callback 
+	 * set specifically for this ssl remains. If no special callback was set before, 
+	 * the default callback for the underlying ctx is used, that was valid at the time 
+	 * ssl was created with SSL_new(3). Within the callback function, 
+	 * SSL_get_ex_data_X509_STORE_CTX_idx can be called to get the data index of the 
+	 * current SSL object that is doing the verification.
+	 * 
+	 * SSL_VERIFY_PEER
+	 * Server mode: the server sends a client certificate request to the client. 
+	 * The certificate returned (if any) is checked. If the verification process fails, 
+	 * the TLS/SSL handshake is immediately terminated with an alert message containing 
+	 * the reason for the verification failure. 
+	 * 
+	 * SSL_VERIFY_FAIL_IF_NO_PEER_CERT
+	 * Server mode: if the client did not return a certificate, the TLS/SSL handshake is 
+	 * immediately terminated with a "handshake failure" alert. This flag must be used 
+	 * together with SSL_VERIFY_PEER. */
+	SSL_set_verify(c->ssl, SSL_VERIFY_PEER|SSL_VERIFY_FAIL_IF_NO_PEER_CERT, NULL);
 	SSL_set_fd(c->ssl, c->fd);
+	/*  sets ssl to work in server mode. */
+	SSL_set_accept_state(c->ssl);
 	c->ssl_handshake_done = 0;
 	c->ssl_error = NULL;
 #endif
@@ -337,6 +359,7 @@ int
 http_client_read(struct http_client *c) {
 	char buffer[4096];
 	int ret = 0;
+	// int flag = 0;
 
 #ifdef HTTP_SSL
 	if (c->ssl) {
@@ -357,12 +380,14 @@ http_client_read(struct http_client *c) {
 						free(c->ssl_error);
 						c->ssl_error = NULL;
 					}
+					goto end;
 				}
 			} else {
 				c->ssl_handshake_done = 1;
 			}
 		}
-
+		/* ERR_clear_error() empties the current thread's error queue. */
+		ERR_clear_error();
 		ret = SSL_read(c->ssl, buffer, sizeof(buffer));
 		if (ret <= 0) {
 			if (handle_SSL_returncode(c, ret) == 0) {
@@ -374,12 +399,17 @@ http_client_read(struct http_client *c) {
 					c->ssl_error = NULL;
 				}
 			}
+		} else {
+			/* obtain number of readable bytes buffered in an SSL object */
+			// if (SSL_pending(c->ssl) > 0)
+			// 	flag = 1;
 		}
 	} else {
 		/* If the SSL object is not created, the connection 
 		 * fails and the connection is closed directly */
 		slog(c->s, WEBDIS_ERROR, "SSL invalid", 0);
 	}
+end:
 #else
 	ret = read(c->fd, buffer, sizeof(buffer));
 #endif
@@ -422,7 +452,6 @@ http_client_read(struct http_client *c) {
 
 	/* keep track of total sent */
 	c->request_sz += ret;
-
 	return ret;
 }
 

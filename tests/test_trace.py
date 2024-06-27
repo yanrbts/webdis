@@ -7,8 +7,8 @@ import time
 # cert_file_path = "/home/yrb/kserver/cert/client.pem"
 # ca_path = "/home/yrb/kserver/cert/rootCA.pem"
 
-cert_file_path = "/home/yrb/src/webdis/cert/client.pem"
-ca_path = "/home/yrb/src/webdis/cert/rootCA.pem"
+cert_file_path = "../cert/client.pem"
+ca_path = "../cert/rootCA.pem"
 
 def random_string(length):
     letters_and_digits = string.ascii_lowercase + string.digits
