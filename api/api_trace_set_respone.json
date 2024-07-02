@@ -1,0 +1,8 @@
+{
+    "flag":"OK",
+    "msg":"success"
+}
+{
+    "flag":"FAIL",
+    "msg":"failed"
+}

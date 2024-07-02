@@ -722,6 +722,61 @@ end:
 	return ret;
 }
 
+int json_auth_parser(const char *buf, size_t len, struct server *s, struct rqparam *r) {
+	int ret = -1;
+	json_t *root;
+	json_error_t error;
+	char buffer[64] = {0};
+
+	(void)len;
+
+	root = json_loads(buf, 0, &error);
+	if(!root) {
+		char log_msg[200];
+		int log_msg_sz = snprintf(log_msg, sizeof(log_msg),
+			"authset Json loads error failed %s (line %d)", error.text, error.line);
+		slog(s, WEBDIS_ERROR, log_msg, log_msg_sz);
+		goto end;
+	}
+
+	json_t *uuid = json_object_get(root, "uuid");
+	if (!json_is_string(uuid)) {
+		slog(s, WEBDIS_ERROR, "authset Json error, uuid is not a string.", 0);
+		json_decref(root);
+		goto end;
+	}
+
+	json_t *machine = json_object_get(root, "machine");
+	if (!json_is_string(machine)) {
+		slog(s, WEBDIS_ERROR, "authset Json error, machine is not a string.", 0);
+		json_decref(root);
+		goto end;
+	}
+
+	json_t *action = json_object_get(root, "action");
+	if (!json_is_integer(action)) {
+		slog(s, WEBDIS_ERROR, "authset Json error, action is not a integer.", 0);
+		json_decref(root);
+		goto end;
+	}
+
+	r->ftype = WB_AUTHSET;
+	r->param.tset.fileuuid = strdup(json_string_value(uuid));
+	r->param.tset.machine = strdup(json_string_value(machine));
+	r->param.tset.action = json_integer_value(action);
+	snprintf(buffer, sizeof(buffer), "trace:%lld", ustime());
+	r->param.tset.traceid = strdup(buffer);
+
+	char *jstr = json_string_output(root, NULL);
+	r->param.tset.data = strdup(jstr);
+
+	ret = 0;
+	if (jstr) free(jstr);
+	json_decref(root);
+end:
+	return ret;
+}
+
 int json_fileget_parser(const char *buf, size_t len, struct server *s, struct rqparam *r) {
 	int ret = -1;
 	json_t *root;
@@ -827,6 +882,54 @@ int json_filegetall_parser(const char *buf, size_t len, struct server *s, struct
 	r->ftype = WB_FILEGETALL;
 	r->param.fpage.uuid = strdup(json_string_value(machine));
 	r->param.fpage.page = json_integer_value(page);
+
+	ret = 0;
+	json_decref(root);
+end:
+	return ret;
+}
+
+int json_filegetauth_parser(const char *buf, size_t len, struct server *s, struct rqparam *r) {
+	int ret = -1;
+	json_t *root;
+	json_error_t error;
+
+	(void)len;
+
+	root = json_loads(buf, 0, &error);
+	if(!root) {
+		char log_msg[200];
+		int log_msg_sz = snprintf(log_msg, sizeof(log_msg),
+			"filegetauth Json loads error failed %s (line %d)", error.text, error.line);
+		slog(s, WEBDIS_ERROR, log_msg, log_msg_sz);
+		goto end;
+	}
+
+	json_t *machine = json_object_get(root, "machine");
+	if (!json_is_string(machine)) {
+		slog(s, WEBDIS_ERROR, "filegetauth Json error, machine is not a string.", 0);
+		json_decref(root);
+		goto end;
+	}
+
+	json_t *page = json_object_get(root, "page");
+	if (!json_is_integer(page)) {
+		slog(s, WEBDIS_ERROR, "filegetauth Json error, page is not a integer.", 0);
+		json_decref(root);
+		goto end;
+	}
+
+	json_t *action = json_object_get(root, "action");
+	if (!json_is_integer(page)) {
+		slog(s, WEBDIS_ERROR, "filegetauth Json error, page is not a integer.", 0);
+		json_decref(root);
+		goto end;
+	}
+
+	r->ftype = WB_AUTHGET;
+	r->param.authpage.machine = strdup(json_string_value(machine));
+	r->param.authpage.page = json_integer_value(page);
+	r->param.authpage.action = json_integer_value(action);
 
 	ret = 0;
 	json_decref(root);
@@ -1016,8 +1119,10 @@ void json_hscan_reply(redisAsyncContext *c, void *r, void *privdata) {
 				 * and the number of commands for the filegettrace interface is 7.*/
 				if (cmd->ftype == WB_TRACEGET) {
 					json_object_set_new(jroot, "traces", jlist);
-				} else {
+				} else if (cmd->ftype == WB_FILEGETALL) {
 					json_object_set_new(jroot, "files", jlist);
+				} else if (cmd->ftype == WB_AUTHGET) {
+					json_object_set_new(jroot, "list", jlist);
 				}
 			}
 			break;
@@ -1070,6 +1175,38 @@ void json_multi_reply(redisAsyncContext *c, void *r, void *privdata) {
 	redisAsyncCommand(c, json_exec_reply, cmd, "%s", "EXEC");
 }
 
+void json_authmulti_reply(redisAsyncContext *c, void *r, void *privdata) {
+	int ac;
+    redisReply *reply = (redisReply *)r;
+	struct cmd *cmd = privdata;
+
+    if (reply == NULL) 
+		return;
+
+	redisAsyncCommand(c, setCallback, NULL, 
+					"HSET filekey:%s %s %s", 
+					cmd->rparam->param.tset.fileuuid,
+					cmd->rparam->param.tset.traceid,
+					cmd->rparam->param.tset.data);
+
+	ac = cmd->rparam->param.tset.action;
+	/*
+	 * to determine whether the client triggers authorization or applies for 
+	 * authorization operation 1 is application, 2 is authorization
+	 */
+	if (ac == 1 || ac == 2) {
+		char buffer[64] = {0};
+		snprintf(buffer, sizeof(buffer), ac == 2 ? "auth:%lld" : "apply:%lld", ustime());
+		redisAsyncCommand(c, setCallback, NULL, 
+					"HSET machine:%s %s %s", 
+					cmd->rparam->param.tset.machine,
+					buffer,
+					cmd->rparam->param.tset.data);
+	}
+	
+	redisAsyncCommand(c, json_authmulti_exec_reply, cmd, "%s", "EXEC");
+}
+
 void json_exec_reply(redisAsyncContext *c, void *r, void *privdata) {
 	int number = 0;
 	redisReply *reply = r;
@@ -1115,6 +1252,61 @@ void json_exec_reply(redisAsyncContext *c, void *r, void *privdata) {
 			json_object_set_new(jroot, "flag", json_string("FAIL"));
 	} else {
 		json_object_set_new(jroot, "flag", json_null());
+	}
+	/* get JSON as string, possibly with JSONP wrapper */
+	jstr = json_string_output(jroot, cmd->jsonp);
+	/* send reply */
+	format_send_reply(cmd, jstr, strlen(jstr), "application/json");
+	/* cleanup */
+	json_decref(jroot);
+	free(jstr);
+}
+
+void json_authmulti_exec_reply(redisAsyncContext *c, void *r, void *privdata) {
+	int number = 0;
+	redisReply *reply = r;
+	struct cmd *cmd = privdata;
+	char *jstr;
+	json_t *jroot;
+
+	(void)c;
+	/* broken connection */
+	if(cmd == NULL)
+		return;
+	/* broken Redis link */
+	if(reply == NULL) {
+		format_send_error(cmd, 503, "Service Unavailable");
+		return;
+	}
+
+	jroot = json_object();
+
+	if (reply->type == REDIS_REPLY_ERROR) {
+		slog(cmd->w->s, WEBDIS_ERROR, reply->str, 0);
+		json_object_set_new(jroot, "flag", json_string("FAIL"));
+	} else if (reply->type == REDIS_REPLY_ARRAY) {
+		for (size_t i = 0; i < reply->elements; i++) {
+            redisReply *element = reply->element[i];
+
+			switch (element->type) {
+			case REDIS_REPLY_INTEGER:
+				number++;
+				break;
+			case REDIS_REPLY_STRING:
+			case REDIS_REPLY_STATUS:
+			case REDIS_REPLY_ERROR:
+			default:
+				break;
+			}
+        }
+		/* Here we need to determine whether all commands in the transaction 
+		 * are executed successfully. Currently, there are two commands in the transaction.*/
+		if (number > 0)
+			json_object_set_new(jroot, "flag", json_string("OK"));
+		else
+			json_object_set_new(jroot, "flag", json_string("FAIL"));
+	} else {
+		json_object_set_new(jroot, "flag", json_string("FAIL"));
 	}
 	/* get JSON as string, possibly with JSONP wrapper */
 	jstr = json_string_output(jroot, cmd->jsonp);

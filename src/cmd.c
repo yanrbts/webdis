@@ -100,7 +100,9 @@ rqparam_free(struct rqparam *r) {
 	case WB_FILEGET:
 		free(r->param.fileuuid);
 		break;
+	case WB_AUTHSET:
 	case WB_TRACESET:
+		free(r->param.tset.machine);
 		free(r->param.tset.fileuuid);
 		free(r->param.tset.traceid);
 		free(r->param.tset.data);
@@ -361,6 +363,14 @@ static struct apientry apis[] = {
 		.ftype = WB_TRACESET
 	},
 	{
+		.uri = "fileauth",
+		.cmdline = "MULTI",
+		.count = 1,
+		.func = json_auth_parser,
+		.replyfunc = json_authmulti_reply,
+		.ftype = WB_AUTHSET
+	},
+	{
 		.uri = "fileget",
 		.cmdline = "HGET filekey:%s %s",
 		.count = 3,
@@ -383,6 +393,17 @@ static struct apientry apis[] = {
 		.func = json_filegetall_parser,
 		.replyfunc = json_hscan_reply,
 		.ftype = WB_FILEGETALL
+	},
+	{
+		.uri = "filegetauth",
+		.cmdline = &(char *[]){
+			"HSCAN machine:%s %d MATCH apply:* COUNT %d",
+			"HSCAN machine:%s %d MATCH auth:* COUNT %d"
+		},
+		.count = 7,
+		.func = json_filegetauth_parser,
+		.replyfunc = json_hscan_reply,
+		.ftype = WB_AUTHGET
 	}
 };
 
@@ -545,12 +566,13 @@ start_cmd_run(struct worker *w,
 		if(exec_cmd(w, client, buffer, api->replyfunc, 0, r, WB_REGISTER) == -1)
 			goto end;
 		return CMD_SENT;
+	case WB_AUTHSET:
 	case WB_FILESET:
 		snprintf(buffer, sizeof(buffer), "%s", (char*)api->cmdline);
 		/* If exec_cmd returns -1, it means failure. At this time, the cmd variable 
 		 * has been released. The r variable has also been released. Therefore, 
 		 * r is only released when exec_cmd succeeds.*/
-		if(exec_cmd(w, client, buffer, api->replyfunc, 0, r, WB_FILESET) == -1)
+		if(exec_cmd(w, client, buffer, api->replyfunc, 0, r, api->ftype) == -1)
 			goto end;
 		return CMD_SENT;
 	case WB_FILEGET:
@@ -573,6 +595,24 @@ start_cmd_run(struct worker *w,
 				r->param.tset.fileuuid,
 				r->param.tset.traceid,
 				r->param.tset.data);
+		break;
+	case WB_AUTHGET:
+		if (r->param.authpage.action == 1) {
+			snprintf(buffer, sizeof(buffer), 
+				((char**)api->cmdline)[0],
+				r->param.authpage.machine,
+				r->param.authpage.page,
+				20);
+		} else if (r->param.authpage.action == 2) {
+			snprintf(buffer, sizeof(buffer), 
+				((char**)api->cmdline)[1],
+				r->param.authpage.machine,
+				r->param.authpage.page,
+				20);
+		} else {
+			slog(w->s, WEBDIS_ERROR, "The request action parameter is incorrect. It is not 1 or 2.", 0);
+			goto end;
+		}
 		break;
 	default:
 		goto end;

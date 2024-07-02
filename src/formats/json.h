@@ -25,10 +25,12 @@ json_ws_error(int http_status, const char *msg, size_t msg_sz, size_t *out_sz);
 int json_register_parser(const char *buf, size_t len, struct server *s, struct rqparam *r);
 int json_fileset_parser(const char *buf, size_t len, struct server *s, struct rqparam *r);
 int json_traceset_parser(const char *buf, size_t len, struct server *s, struct rqparam *r);
+int json_auth_parser(const char *buf, size_t len, struct server *s, struct rqparam *r);
 
 int json_fileget_parser(const char *buf, size_t len, struct server *s, struct rqparam *r);
 int json_traceget_parser(const char *buf, size_t len, struct server *s, struct rqparam *r);
 int json_filegetall_parser(const char *buf, size_t len, struct server *s, struct rqparam *r);
+int json_filegetauth_parser(const char *buf, size_t len, struct server *s, struct rqparam *r);
 
 void json_register_reply(redisAsyncContext *c, void *r, void *privdata);
 void json_hscan_reply(redisAsyncContext *c, void *r, void *privdata);
@@ -36,5 +38,7 @@ void json_hset_reply(redisAsyncContext *c, void *r, void *privdata);
 void json_multi_reply(redisAsyncContext *c, void *r, void *privdata);
 void json_exec_reply(redisAsyncContext *c, void *r, void *privdata);
 void json_hgetorset_reply(redisAsyncContext *c, void *r, void *privdata);
+void json_authmulti_reply(redisAsyncContext *c, void *r, void *privdata);
+void json_authmulti_exec_reply(redisAsyncContext *c, void *r, void *privdata);
 
 #endif

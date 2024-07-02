@@ -30,7 +30,9 @@ typedef enum {
 	WB_FILEGET,
 	WB_FILEGETALL,
 	WB_TRACESET,
-	WB_TRACEGET
+	WB_TRACEGET,
+	WB_AUTHSET,
+	WB_AUTHGET
 } functype;
 
 struct cmd {
@@ -89,9 +91,11 @@ struct rqparam {
 
 		/* trace set */
 		struct {
+			char *machine;
 			char *fileuuid;
 			char *traceid;
 			char *data;
+			int action;
 		} tset;
 
 		/* file get */
@@ -103,12 +107,13 @@ struct rqparam {
 			char *uuid;
 			long long page;
 		} fpage;
+		/* file get auth*/
+		struct {
+			int action;
+			char *machine;
+			long long page;
+		} authpage;
 	} param;
-};
-
-struct multicmd {
-	char *cmdline;
-	int count;
 };
 
 typedef int(*jparsefunc)(const char *buf, size_t len, struct server *s, struct rqparam *r);
