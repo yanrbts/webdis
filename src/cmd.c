@@ -597,6 +597,8 @@ start_cmd_run(struct worker *w,
 				r->param.tset.data);
 		break;
 	case WB_AUTHGET:
+		/* Determine whether to request an authorization list or an application list. 
+		 * 1 represents application and 2 represents authorization.*/
 		if (r->param.authpage.action == 1) {
 			snprintf(buffer, sizeof(buffer), 
 				((char**)api->cmdline)[0],
