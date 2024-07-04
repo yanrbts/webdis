@@ -364,7 +364,7 @@ http_apidoc(struct http_client *c) {
 	const char *filename = "./api/api-doc.html";
 	const char *tmp = "Server Error";
 
-	struct http_response *resp = http_response_init(NULL, 200, "OK");
+	struct http_response *resp = http_response_init(c->w, 200, "OK");
 #ifdef HTTP_SSL
 	resp->ssl = c->ssl;
 #endif
