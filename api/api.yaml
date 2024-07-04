@@ -1,0 +1,388 @@
+openapi: 3.0.0
+info:
+  title: Kserver API
+  description: List of Kserver server API 
+  version: 1.0.0
+paths:
+  /register:
+    post:
+      summary: 用户登录接口
+      requestBody:
+          description: Request data
+          required: true
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  machine:
+                    type: string
+                    example: "f526255265340d994510f8d1652e1eb1"
+                  username:
+                    type: string
+                    example: "13998011234"
+                  flag:
+                    type: integer
+                    example: 1
+                    description: "1代表直接插入数据库（更新用户使用），0先判断用户是否存在，如果存在返回原有用户信息不更新"
+                required:
+                  - machine
+                  - username
+                  - flag
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  flag:
+                    type: string
+                    example: "OK"
+                  data:
+                    type: object
+                    properties:
+                      machine:
+                        type: string
+                        example: "f526255265340d994510f8d1652e1eb1"
+                      username:
+                        type: string
+                        example: "13989701110"
+        '400':
+          description: Failure response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  flag:
+                    type: string
+                    example: "FAIL"
+
+  /fileset:
+    post:
+      summary: 上传加密文件信息
+      requestBody:
+        description: Request data
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                filename:
+                  type: string
+                  example: "filename"
+                  description: "文件名"
+                uuid:
+                  type: string
+                  example: "fileuuid"
+                  description: "文件uuid"
+                filepath:
+                  type: string
+                  example: "/path/to/file1.txt"
+                machine:
+                  type: string
+                  example: "f526255265340d994510f8d1652e1eb1"
+              required:
+                - filename
+                - uuid
+                - filepath
+                - machine
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  flag:
+                    type: string
+                    example: "OK"
+        '400':
+          description: Failure response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  flag:
+                    type: string
+                    example: "FAIL"
+
+  /filegetauth:
+    post:
+      summary: 获取授权列表或者申请列表
+      requestBody:
+        description: Request data
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                machine:
+                  type: string
+                  example: "f526255265340d994510f8d1652e1eb1"
+                page:
+                  type: integer
+                  example: 0
+                  description: "游标，第一次查询传0，再次请求赋上次返回数据的游标数"
+                action:
+                  type: integer
+                  example: 1
+                  description: "1获取申请列表，2获取授权列表"
+              required:
+                - machine
+                - page
+                - action
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  page:
+                    type: integer
+                    example: 0
+                    description: "游标，如果数据查询完成则为0，如果不为0继续调用此接口查询，同时将上次的游标数据传给请求数据的page变量"
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        machine:
+                          type: string
+                          example: "uuid"
+                        uuid:
+                          type: string
+                          example: "fileuuid"
+                        filename:
+                          type: string
+                          example: "file1"
+                        filepath:
+                          type: string
+                          example: "/path/to/file1.txt"
+                        username:
+                          type: string
+                          example: "user"
+                        time:
+                          type: string
+                          format: date
+                          example: "2024-05-23"
+                        action:
+                          type: integer
+                          example: 0
+                          description: "溯源类型由客户端定义(如果是1代表申请，2代表授权)"
+        '400':
+          description: Failure response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  flag:
+                    type: string
+                    example: "FAIL"
+
+  /filesettrace:
+    post:
+      summary: 上传溯源信息
+      requestBody:
+        description: Request data
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                machine:
+                  type: string
+                  example: "uuid"
+                  description: "机器码"
+                uuid:
+                  type: string
+                  example: "fileuuid"
+                  description: "文件uuid"
+                filename:
+                  type: string
+                  example: "file1"
+                filepath:
+                  type: string
+                  example: "/path/to/file1.txt"
+                username:
+                  type: string
+                  example: "user"
+                time:
+                  type: string
+                  format: date
+                  example: "2024-05-23"
+                action:
+                  type: integer 
+                  example: 0
+                  description: "溯源类型由客户端定义(如果是1代表申请，2代表授权)"
+              required:
+                - machine
+                - uuid
+                - filename
+                - filepath
+                - username
+                - time
+                - action
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  flag:
+                    type: string
+                    example: "OK"
+        '400':
+          description: Failure response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  flag:
+                    type: string
+                    example: "FAIL"
+  /filegettrace:
+    post:
+      summary: 获取文件追溯信息
+      requestBody:
+        description: Request data
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                uuid:
+                  type: string
+                  example: "fileuuid"
+                page:
+                  type: integer
+                  example: 0
+                  description: "游标，第一次查询传0，再次请求赋上次返回数据的游标数"
+              required:
+                - uuid
+                - page
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  page:
+                    type: integer
+                    example: 0
+                    description: "游标，如果数据查询完成则为0，如果不为0继续调用此接口查询，同时将上次的游标数据传给请求数据的page变量"
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        machine:
+                          type: string
+                          example: "uuid"
+                        uuid:
+                          type: string
+                          example: "fileuuid"
+                        filename:
+                          type: string
+                          example: "file1"
+                        filepath:
+                          type: string
+                          example: "/path/to/file1.txt"
+                        username:
+                          type: string
+                          example: "user"
+                        time:
+                          type: string
+                          format: date
+                          example: "2024-05-23"
+                        action:
+                          type: integer
+                          example: 0
+        '400':
+          description: Failure response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  flag:
+                    type: string
+                    example: "FAIL"
+  
+  /filegetall:
+    post:
+      summary: 获取当前账户的所有加密文件信息（为数据恢复提供可用可不用）
+      requestBody:
+        description: Request data
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                machine:
+                  type: string
+                  example: "f526255265340d994510f8d1652e1eb1"
+                page:
+                  type: integer
+                  example: 0
+                  description: "游标，第一次查询传0，再次请求赋上次返回数据的游标数"
+              required:
+                - machine
+                - page
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  page:
+                    type: integer
+                    example: 0
+                    description: "游标，如果数据查询完成则为0，如果不为0继续调用此接口查询，同时将上次的游标数据传给请求数据的page变量"
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        filename:
+                          type: string
+                          example: "file1"
+                        uuid:
+                          type: string
+                          example: "file1uuid"
+                        filepath:
+                          type: string
+                          example: "/path/to/file1.txt"
+                        machine:
+                          type: string
+                          example: "f526255265340d994510f8d1652e1eb1"
+        '400':
+          description: Failure response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  flag:
+                    type: string
+                    example: "FAIL"
+  

@@ -10,6 +10,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <stdio.h>
+#include <fcntl.h>   // for open syscall
 
 /* HTTP Response */
 
@@ -352,6 +353,61 @@ http_crossdomain(struct http_client *c) {
 
 	http_response_write(resp, c->fd);
 	http_client_reset(c);
+}
+
+void
+http_apidoc(struct http_client *c) {
+	int fd = -1;
+	char *buffer = NULL;
+	off_t file_size = 0;
+	ssize_t bytes_read;
+	const char *filename = "./api/api-doc.html";
+	const char *tmp = "Server Error";
+
+	struct http_response *resp = http_response_init(NULL, 200, "OK");
+#ifdef HTTP_SSL
+	resp->ssl = c->ssl;
+#endif
+
+	fd = open(filename, O_RDONLY);
+	if (fd == -1) {
+		slog(c->s, WEBDIS_ERROR, strerror(errno), 0);
+		buffer = strdup(tmp);  // Copy error message
+		goto end;
+	}
+
+	file_size = lseek(fd, 0, SEEK_END);
+	if (file_size == -1) {
+        slog(c->s, WEBDIS_ERROR, strerror(errno), 0);
+		buffer = strdup(tmp);  // Copy error message
+		goto end;
+    }
+    lseek(fd, 0, SEEK_SET);  // Reset file offset to the beginning
+
+	// Allocate memory
+    buffer = (char *)malloc(file_size);
+    if (buffer == NULL) {
+        slog(c->s, WEBDIS_ERROR, strerror(errno), 0);
+		buffer = strdup(tmp);  // Copy error message
+		goto end;
+    }
+
+	// Read file content into buffer
+    bytes_read = read(fd, buffer, file_size);
+    if (bytes_read == -1) {
+        slog(c->s, WEBDIS_ERROR, strerror(errno), 0);
+		buffer = strdup(tmp);  // Copy error message
+    }
+
+end:
+	resp->http_version = c->http_version;
+	http_response_set_connection_header(c, resp);
+	http_response_set_header(resp, "Content-Type", "text/html", HEADER_COPY_NONE);
+	http_response_set_body(resp, buffer, buffer ? (size_t)file_size : strlen(tmp));
+	http_response_write(resp, c->fd);
+	http_client_reset(c);
+	if (fd != -1) close(fd);
+	if (buffer) free(buffer);
 }
 
 /* Simple error response */

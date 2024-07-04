@@ -1,6 +1,6 @@
 {
     "page":0,
-    "list": [
+    "data": [
         {
             "machine":"uuid",
             "uuid":"fileuuid",

@@ -91,4 +91,7 @@ http_response_write_chunk(struct cmd *cmd, struct worker *w, const char *p, size
 void
 http_response_set_keep_alive(struct http_response *r, int enabled);
 
+void
+http_apidoc(struct http_client *c);
+
 #endif

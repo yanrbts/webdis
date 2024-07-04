@@ -111,6 +111,9 @@ rqparam_free(struct rqparam *r) {
 	case WB_TRACEGET:
 		free(r->param.fpage.uuid);
 		break;
+	case WB_AUTHGET:
+		free(r->param.authpage.machine);
+		break;
 	default:
 		break;
 	}
@@ -355,7 +358,7 @@ static struct apientry apis[] = {
 		.ftype = WB_FILESET
 	},
 	{
-		.uri = "filesettrace",
+		.uri = "fileauth",
 		.cmdline = "HSET filekey:%s %s %s",
 		.count = 4,
 		.func = json_traceset_parser,
@@ -363,7 +366,7 @@ static struct apientry apis[] = {
 		.ftype = WB_TRACESET
 	},
 	{
-		.uri = "fileauth",
+		.uri = "filesettrace",
 		.cmdline = "MULTI",
 		.count = 1,
 		.func = json_auth_parser,
@@ -535,11 +538,14 @@ start_cmd_run(struct worker *w,
 			  struct apientry *api, 
 			  const char *body,
 			  size_t body_len) {
-	struct rqparam *r;
+	struct rqparam *r = NULL;
 	char buffer[1024] = {0};
 
 	r = calloc(1, sizeof(struct rqparam));
-	api->func(body, body_len, w->s, r);
+	if (api->func(body, body_len, w->s, r) == -1) {
+		if (r) free(r);
+		return CMD_PARAM_ERROR;
+	}
 
 	switch (api->ftype) {
 	case WB_REGISTER:
@@ -653,13 +659,6 @@ cmd_run_api(struct worker *w,
 
 void
 cmd_send(struct cmd *cmd, formatting_fun f_format) {
-	// printf("{");
-	// for (int i = 0; i < cmd->count; i++) {
-	// 	printf("%s ", cmd->argv[i]);
-	// }
-	// printf("}\n");
-	// fflush(stdout);
-
 	redisAsyncCommandArgv(cmd->ac, f_format, f_format == NULL ? NULL : cmd, cmd->count,
 		(const char **)cmd->argv, cmd->argv_len);
 }

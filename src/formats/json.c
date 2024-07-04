@@ -940,8 +940,7 @@ end:
 void json_hgetorset_reply(redisAsyncContext *c, void *r, void *privdata) {
 	redisReply *reply = r;
 	struct cmd *cmd = privdata;
-	json_t *jroot, *jtmp = NULL;
-	json_error_t error;
+	json_t *jroot;
 	char *jstr;
 
 	(void)c;
@@ -969,15 +968,17 @@ void json_hgetorset_reply(redisAsyncContext *c, void *r, void *privdata) {
 		break;
 
 	case REDIS_REPLY_STRING:
-		jtmp = json_loads(reply->str, 0, &error);
-		json_object_update(jroot, jtmp);
+		// jtmp = json_loads(reply->str, 0, &error);
+		// json_object_update(jroot, jtmp);
+		json_object_set_new(jroot, "flag", json_string("OK"));
+		json_object_set_new(jroot, "data", json_string(reply->str));
 		break;
 	case REDIS_REPLY_INTEGER:
 		json_object_set_new(jroot, "flag", json_string("OK"));
 		break;
 	case REDIS_REPLY_NIL:
 	default:
-		json_object_set_new(jroot, "flag", json_null());
+		json_object_set_new(jroot, "flag", json_string("FAIL"));
 		break;
 	}
 	/* get JSON as string, possibly with JSONP wrapper */
@@ -985,8 +986,6 @@ void json_hgetorset_reply(redisAsyncContext *c, void *r, void *privdata) {
 	/* send reply */
 	format_send_reply(cmd, jstr, strlen(jstr), "application/json");
 	/* cleanup */
-	if (jtmp)
-		json_decref(jtmp);
 	json_decref(jroot);
 	free(jstr);
 }
@@ -994,9 +993,8 @@ void json_hgetorset_reply(redisAsyncContext *c, void *r, void *privdata) {
 void json_register_reply(redisAsyncContext *c, void *r, void *privdata) {
 	redisReply *reply = r;
 	struct cmd *cmd = privdata;
-	json_t *jroot, *jtmp = NULL;
+	json_t *jroot = NULL;
 	char *jstr;
-	json_error_t error;
 
 	(void)c;
 	/* broken connection */
@@ -1011,24 +1009,22 @@ void json_register_reply(redisAsyncContext *c, void *r, void *privdata) {
 
 	jroot = json_object();
 	switch(reply->type) {
-	case REDIS_REPLY_ERROR:
-		slog(cmd->w->s, WEBDIS_ERROR, reply->str, 0);
-		json_object_set_new(jroot, "flag", json_string("FAIL"));
-		break;
 	case REDIS_REPLY_NIL: /* user not exist*/
 	case REDIS_REPLY_INTEGER: /* insert succrss */
 	case REDIS_REPLY_STRING: /* user already exist */
 		if (cmd->rparam->param.ureg.flag == 1) {
 			/* Insert user successfully */;
 			slog(cmd->w->s, WEBDIS_INFO, "Insert user successfully", 0);
-			jtmp = json_loads(cmd->rparam->param.ureg.data, 0, &error);
-			json_object_update(jroot, jtmp);
+			// jtmp = json_loads(cmd->rparam->param.ureg.data, 0, &error);
+			// json_object_update(jroot, jtmp);
+			json_object_set_new(jroot, "flag", json_string("OK"));
+			json_object_set_new(jroot, "data", json_string(reply->str));
 		} else {
 			if (reply->str) {
 				/* User already exists */;
 				slog(cmd->w->s, WEBDIS_INFO, "User already exists", 0);
-				jtmp = json_loads(reply->str, 0, &error);
-				json_object_update(jroot, jtmp);
+				json_object_set_new(jroot, "flag", json_string("OK"));
+				json_object_set_new(jroot, "data", json_string(reply->str));
 			} else {
 				/* User does not exist Start insert 
 				 * Here, you must change the flag to insert to 
@@ -1039,9 +1035,15 @@ void json_register_reply(redisAsyncContext *c, void *r, void *privdata) {
 								cmd->rparam->param.ureg.machine,
 								cmd->rparam->param.ureg.machine,
 								cmd->rparam->param.ureg.data);
+				json_decref(jroot);
 				return;
 			}
 		}
+		break;
+	case REDIS_REPLY_ERROR:
+	default:
+		slog(cmd->w->s, WEBDIS_ERROR, reply->str, 0);
+		json_object_set_new(jroot, "flag", json_string("FAIL"));
 		break;
 	}
 	/* get JSON as string, possibly with JSONP wrapper */
@@ -1049,8 +1051,6 @@ void json_register_reply(redisAsyncContext *c, void *r, void *privdata) {
 	/* send reply */
 	format_send_reply(cmd, jstr, strlen(jstr), "application/json");
 	/* cleanup */
-	if (jtmp)
-		json_decref(jtmp);
 	json_decref(jroot);
 	free(jstr);
 }
@@ -1098,6 +1098,7 @@ void json_hscan_reply(redisAsyncContext *c, void *r, void *privdata) {
 				redisReply *keys;
 
 				cursor = strtoull(reply->element[0]->str, NULL, 10);
+				json_object_set_new(jroot, "flag", json_string("OK"));
 				json_object_set_new(jroot, "page", json_integer(cursor));
 
 				jlist = json_array();
@@ -1117,19 +1118,21 @@ void json_hscan_reply(redisAsyncContext *c, void *r, void *privdata) {
 				 * This callback function is only used by the filegetall and filegettrace 
 				 * interfaces. The number of commands for the filegetall interface is 5, 
 				 * and the number of commands for the filegettrace interface is 7.*/
-				if (cmd->ftype == WB_TRACEGET) {
+				json_object_set_new(jroot, "data", jlist);
+
+				/*if (cmd->ftype == WB_TRACEGET) {
 					json_object_set_new(jroot, "traces", jlist);
 				} else if (cmd->ftype == WB_FILEGETALL) {
 					json_object_set_new(jroot, "files", jlist);
 				} else if (cmd->ftype == WB_AUTHGET) {
 					json_object_set_new(jroot, "list", jlist);
-				}
+				}*/
 			}
 			break;
 
 		case REDIS_REPLY_NIL:
 		default:
-			json_object_set_new(jroot, "flag", json_null());
+			json_object_set_new(jroot, "flag", json_string("FAIL"));
 			break;
 	}
 	/* get JSON as string, possibly with JSONP wrapper */

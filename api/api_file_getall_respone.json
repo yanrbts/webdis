@@ -1,6 +1,6 @@
 {
     "page":0,
-    "files": [
+    "data": [
         {
             "filename":"file1",
             "uuid":"file1uuid",

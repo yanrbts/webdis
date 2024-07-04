@@ -593,3 +593,12 @@ Publish messages to redis to see output similar to the following:
 {"SUBSCRIBE":["message","hello","some message"]}
 {"SUBSCRIBE":["message","hello","some other message"]} 
 ```
+
+# API Document Generation
+```shell
+sudo npm install -g n
+sudo n stable
+sudo npm install -g redoc-cli
+cd ./api
+redoc-cli bundle api.yaml -o api-doc.html
+```

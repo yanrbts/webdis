@@ -72,7 +72,7 @@ worker_can_read(int fd, short event, void *p) {
 			return;
 		}
 	}
-	
+
 	if(!c->is_websocket) {
 		/* run parser */
 		nparsed = http_client_execute(c);
@@ -235,6 +235,11 @@ worker_process_client(struct http_client *c) {
 	cmd_response_t ret = CMD_PARAM_ERROR;
 	switch(c->parser.method) {
 		case HTTP_GET:
+			if(c->path_sz == 4 && memcmp(c->path, "/api", 4) == 0) {
+				http_apidoc(c);
+				return;
+			}
+
 			if(c->path_sz == 16 && memcmp(c->path, "/crossdomain.xml", 16) == 0) {
 				http_crossdomain(c);
 				return;

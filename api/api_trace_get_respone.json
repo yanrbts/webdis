@@ -1,9 +1,11 @@
 {
     "page":0,
-    "traces": [
+    "data": [
         {
             "machine":"uuid",
             "uuid":"fileuuid",
+            "filename":"file1",
+            "filepath":"/path/to/file1.txt",
             "username":"user",
             "time":"2024-05-23",
             "action":0
