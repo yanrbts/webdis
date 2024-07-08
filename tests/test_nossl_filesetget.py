@@ -14,7 +14,7 @@ def fileset(num):
     data = {
         "filename":f"file{num}",
         "uuid":f"fileuuid{num}",
-        "filepath":f"/path/to/file{num}.txt",
+        "filepath":f"/path/to/file{num}.xls",
         "machine":"f526255265340d994510f8d1652e1eb3"
     }
 
@@ -45,5 +45,6 @@ def fileget(num):
 
 if __name__ == "__main__":
     for i in range(30):
-        fileset(i)
-        fileget(i)
+        tmp = random_string(8)
+        fileset(tmp)
+        fileget(tmp)

@@ -990,6 +990,98 @@ void json_hgetorset_reply(redisAsyncContext *c, void *r, void *privdata) {
 	free(jstr);
 }
 
+struct userdata {
+	struct server *s;
+	char *userid;
+};
+
+static void get_current_date(char *buffer, size_t size) {
+    time_t now = time(NULL);
+    struct tm *tm_info = localtime(&now);
+    strftime(buffer, size, "%Y-%m-%d", tm_info);
+}
+
+static time_t get_expiry_time() {
+    time_t now = time(NULL);
+    struct tm *tm_info = localtime(&now);
+    tm_info->tm_hour = 0;
+    tm_info->tm_min = 0;
+    tm_info->tm_sec = 0;
+    tm_info->tm_mday += 1; // Move to next day
+    return mktime(tm_info);
+}
+
+static void sismember_reply(redisAsyncContext *c, void *r, void *privdata) {
+	char current_date[20];
+	char counter_key[256];
+	char set_key[256];
+	redisReply *reply = r;
+	struct userdata *u = privdata;
+	time_t expiry_time, now;
+	int seconds_to_midnight;
+
+	get_current_date(current_date, sizeof(current_date));
+	snprintf(counter_key, sizeof(counter_key), "login_count:%s", current_date);
+	snprintf(set_key, sizeof(set_key), "login_users:%s", current_date);
+
+	/* Get the Unix timestamp of the next morning */
+	expiry_time = get_expiry_time();
+	now = time(NULL);
+	seconds_to_midnight = (int)difftime(expiry_time, now);
+
+	switch(reply->type) {
+		case REDIS_REPLY_INTEGER:
+			{
+				/* There is no record for the current login */
+				if (reply->integer == 0) {
+					slog(u->s, WEBDIS_INFO, "First login of the day, record login information", 0);
+
+					redisAsyncCommand(c, NULL, NULL, "MULTI");
+					/* Used to store the user ID that has logged in on that day */
+					redisAsyncCommand(c, NULL, NULL, "SADD %s %s", set_key, u->userid);
+					/* Used to store the login count for the day */
+					redisAsyncCommand(c, NULL, NULL, "HINCRBY %s count 1", counter_key);
+					redisAsyncCommand(c, NULL, NULL, "INCR total_login_count");
+					/* Set the expiration time of the collection and counter keys to the next morning */
+					redisAsyncCommand(c, NULL, NULL, "EXPIRE %s %d", set_key, seconds_to_midnight);
+					redisAsyncCommand(c, NULL, NULL, "EXPIRE %s %d", counter_key, seconds_to_midnight);
+					redisAsyncCommand(c, NULL, NULL, "EXEC");
+				}
+			}	
+			break;
+		default:
+			slog(u->s, WEBDIS_ERROR, "SISMEMBER command returns incorrect data", 0);
+			break;
+	}
+	free(u->userid);
+	free(u);
+}
+/* Determine whether the user has logged in on the day. 
+ * If not, start increasing the number of logged-in users 
+ * for the day, and the total number of logged-in users 
+ * will be increased by one. At the same time, the user 
+ * ID of the day will be saved and expired in the 
+ * early morning of the next day.*/
+static void json_sismember_exec(redisAsyncContext *c, struct cmd *cmd) {
+	char current_date[20];
+	char set_key[256];
+	struct userdata *ud;
+
+	ud = (struct userdata*)calloc(1, sizeof(*ud));
+	ud->s = cmd->w->s;
+	ud->userid = strdup(cmd->rparam->param.ureg.machine);
+
+	get_current_date(current_date, sizeof(current_date));
+	snprintf(set_key, sizeof(set_key), "login_users:%s", current_date);
+
+	/* Determine whether the account has been logged in on the same day*/
+	redisAsyncCommand(c, sismember_reply, 
+						(void*)ud, 
+						"SISMEMBER %s %s", 
+						set_key, 
+						cmd->rparam->param.ureg.machine);
+} 
+
 void json_register_reply(redisAsyncContext *c, void *r, void *privdata) {
 	redisReply *reply = r;
 	struct cmd *cmd = privdata;
@@ -1018,7 +1110,7 @@ void json_register_reply(redisAsyncContext *c, void *r, void *privdata) {
 			// jtmp = json_loads(cmd->rparam->param.ureg.data, 0, &error);
 			// json_object_update(jroot, jtmp);
 			json_object_set_new(jroot, "flag", json_string("OK"));
-			json_object_set_new(jroot, "data", json_string(reply->str));
+			json_object_set_new(jroot, "data", json_string(cmd->rparam->param.ureg.data));
 		} else {
 			if (reply->str) {
 				/* User already exists */;
@@ -1039,6 +1131,7 @@ void json_register_reply(redisAsyncContext *c, void *r, void *privdata) {
 				return;
 			}
 		}
+		json_sismember_exec(c, cmd);
 		break;
 	case REDIS_REPLY_ERROR:
 	default:
@@ -1119,14 +1212,6 @@ void json_hscan_reply(redisAsyncContext *c, void *r, void *privdata) {
 				 * interfaces. The number of commands for the filegetall interface is 5, 
 				 * and the number of commands for the filegettrace interface is 7.*/
 				json_object_set_new(jroot, "data", jlist);
-
-				/*if (cmd->ftype == WB_TRACEGET) {
-					json_object_set_new(jroot, "traces", jlist);
-				} else if (cmd->ftype == WB_FILEGETALL) {
-					json_object_set_new(jroot, "files", jlist);
-				} else if (cmd->ftype == WB_AUTHGET) {
-					json_object_set_new(jroot, "list", jlist);
-				}*/
 			}
 			break;
 

@@ -268,7 +268,6 @@ ws_log_unauthorized(struct ws_client *ws) {
 
 static int
 ws_execute(struct ws_client *ws, struct ws_msg *msg) {
-
 	struct http_client *c = ws->http_client;
 	struct cmd*(*fun_extract)(struct http_client *, const char *, size_t) = NULL;
 	formatting_fun fun_reply = NULL;
