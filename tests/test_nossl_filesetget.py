@@ -27,7 +27,7 @@ def fileset(num):
         if response.status_code == 200:
             print(response.json())
             # number += 1
-            print(number)
+            # print(number)
         else:
             print(f'Request failed with status code {response.status_code}')
             print('Response:', response.text)
