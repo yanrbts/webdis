@@ -992,7 +992,7 @@ void json_hgetorset_reply(redisAsyncContext *c, void *r, void *privdata) {
 
 struct userdata {
 	struct server *s;
-	char *userid;
+	char *data;
 };
 
 static void get_current_date(char *buffer, size_t size) {
@@ -1038,7 +1038,7 @@ static void sismember_reply(redisAsyncContext *c, void *r, void *privdata) {
 
 					redisAsyncCommand(c, NULL, NULL, "MULTI");
 					/* Used to store the user ID that has logged in on that day */
-					redisAsyncCommand(c, NULL, NULL, "SADD %s %s", set_key, u->userid);
+					redisAsyncCommand(c, NULL, NULL, "SADD %s %s", set_key, u->data);
 					/* Used to store the login count for the day */
 					redisAsyncCommand(c, NULL, NULL, "HINCRBY %s count 1", counter_key);
 					redisAsyncCommand(c, NULL, NULL, "INCR total_login_count");
@@ -1053,7 +1053,7 @@ static void sismember_reply(redisAsyncContext *c, void *r, void *privdata) {
 			slog(u->s, WEBDIS_ERROR, "SISMEMBER command returns incorrect data", 0);
 			break;
 	}
-	free(u->userid);
+	free(u->data);
 	free(u);
 }
 /* Determine whether the user has logged in on the day. 
@@ -1069,7 +1069,7 @@ static void json_sismember_exec(redisAsyncContext *c, struct cmd *cmd) {
 
 	ud = (struct userdata*)calloc(1, sizeof(*ud));
 	ud->s = cmd->w->s;
-	ud->userid = strdup(cmd->rparam->param.ureg.machine);
+	ud->data = strdup(cmd->rparam->param.ureg.data);
 
 	get_current_date(current_date, sizeof(current_date));
 	snprintf(set_key, sizeof(set_key), "login_users:%s", current_date);

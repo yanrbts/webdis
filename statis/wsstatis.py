@@ -142,7 +142,7 @@ async def statis_data(rds):
 
     provinces = []
     filetype = []
-    user_total = get_usertotal(rds)
+    user_total = 0
     file_total = get_filetotal(rds)
     today_login_count, total_login_count = get_login_counts(rds)
 
