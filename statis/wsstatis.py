@@ -62,6 +62,44 @@ def get_usertotal(rds):
         click.secho(f"[-] An error occurred: {e}", fg="red")
         return 0
 
+# def get_today_userinfos(rds):
+#     current_date = datetime.now().strftime("%Y-%m-%d")
+#     setkey = f"login_users:{current_date}"
+
+#     members = rds.smembers(setkey)
+#     user_list = [member.decode('utf-8') for member in members]
+
+#     return user_list
+
+def get_today_userinfos(rds):
+    current_date = datetime.now().strftime("%Y-%m-%d")
+    setkey = f"login_users:{current_date}"
+    current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    members = rds.smembers(setkey)
+    user_list = []
+    idx = 0
+
+    for member in members:
+        try:
+            # 将 member 解码为字符串
+            member_str = member.decode('utf-8')
+            user = rds.hget(f"userkey:{member_str}", member_str)
+            if user:
+                user_info = json.loads(user)
+                user_info['createTime'] = current_time
+                user_info['gatewayno'] = member_str
+                user_info['onlineState'] = 1
+                user_info['provinceName'] = "甘肃"
+                user_info['cityName'] = "天水"
+                user_list.append(user_info)
+            else:
+                print(f"No data found for member: {member_str}")
+        except json.JSONDecodeError as e:
+            print(f"Failed to decode JSON for member: {member}, Error: {e}")
+
+    return user_list
+
 def get_login_counts(rds):
     """Get the number of people logged in today and the cumulative number of people logged in"""
     try:
@@ -145,7 +183,8 @@ async def statis_data(rds):
     user_total = 0
     file_total = get_filetotal(rds)
     today_login_count, total_login_count = get_login_counts(rds)
-
+    onlineusers = get_today_userinfos(rds)
+    
     data = {
         "today_user_count": today_login_count,
         "total_login_count": total_login_count,
@@ -153,14 +192,16 @@ async def statis_data(rds):
         "filetype": filetype,
         "usertotal": user_total,
         "filetotal": file_total,
-        "fileext": suffix_map
+        "fileext": suffix_map,
+        "online_users": onlineusers
     }
-    
-    click.secho(
-        f"[*] today count:{today_login_count},"
-        f" total count:{total_login_count},"
-        f" total files:{file_total},"
-        f" file type:{json.dumps(suffix_map)}", fg="green")
+    click.secho(f"[*] {json.dumps(data)}", fg="green")
+    # click.secho(
+    #     f"[*] today count:{today_login_count},"
+    #     f" total count:{total_login_count},"
+    #     f" total files:{file_total},"
+    #     f" file type:{json.dumps(suffix_map)}", 
+    #     f" today users:{json.dumps(onlineusers)}", fg="green")
     return data
 
 async def websocket_handler(websocket, path, rds):

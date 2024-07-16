@@ -7,8 +7,8 @@ def register():
     url = "http://127.0.0.1:7379/register"
 
     data = {
-        "machine":"f526255265340d994510f8d1652e1eb15",
-        "username":"13989701110",
+        "machine":"f626255265340d994510f8d1652e1eb25",
+        "username":"16989701125",
         "flag":0
     }
 

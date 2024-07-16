@@ -1069,7 +1069,7 @@ static void json_sismember_exec(redisAsyncContext *c, struct cmd *cmd) {
 
 	ud = (struct userdata*)calloc(1, sizeof(*ud));
 	ud->s = cmd->w->s;
-	ud->data = strdup(cmd->rparam->param.ureg.data);
+	ud->data = strdup(cmd->rparam->param.ureg.machine);
 
 	get_current_date(current_date, sizeof(current_date));
 	snprintf(set_key, sizeof(set_key), "login_users:%s", current_date);
