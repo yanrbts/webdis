@@ -641,7 +641,7 @@ int json_fileset_parser(const char *buf, size_t len, struct server *s, struct rq
 		goto end;
 	}
 
-	json_t *uuid = json_object_get(root, "uuid");
+	json_t *uuid = json_object_get(root, "fileuuid");
 	if (!json_is_string(uuid)) {
 		slog(s, WEBDIS_ERROR, "fileset Json error, uuid is not a string.", 0);
 		json_decref(root);
@@ -700,7 +700,7 @@ int json_traceset_parser(const char *buf, size_t len, struct server *s, struct r
 		goto end;
 	}
 
-	json_t *uuid = json_object_get(root, "uuid");
+	json_t *uuid = json_object_get(root, "fileuuid");
 	if (!json_is_string(uuid)) {
 		slog(s, WEBDIS_ERROR, "traceset Json error, uuid is not a string.", 0);
 		json_decref(root);
@@ -739,7 +739,7 @@ int json_auth_parser(const char *buf, size_t len, struct server *s, struct rqpar
 		goto end;
 	}
 
-	json_t *uuid = json_object_get(root, "uuid");
+	json_t *uuid = json_object_get(root, "fileuuid");
 	if (!json_is_string(uuid)) {
 		slog(s, WEBDIS_ERROR, "authset Json error, uuid is not a string.", 0);
 		json_decref(root);
@@ -793,7 +793,7 @@ int json_fileget_parser(const char *buf, size_t len, struct server *s, struct rq
 		goto end;
 	}
 
-	json_t *uuid = json_object_get(root, "uuid");
+	json_t *uuid = json_object_get(root, "fileuuid");
 	if (!json_is_string(uuid)) {
 		slog(s, WEBDIS_ERROR, "fileget Json error, uuid is not a string.", 0);
 		json_decref(root);
@@ -825,7 +825,7 @@ int json_traceget_parser(const char *buf, size_t len, struct server *s, struct r
 		goto end;
 	}
 
-	json_t *uuid = json_object_get(root, "uuid");
+	json_t *uuid = json_object_get(root, "fileuuid");
 	if (!json_is_string(uuid)) {
 		slog(s, WEBDIS_ERROR, "traceget Json error, uuid is not a string.", 0);
 		json_decref(root);

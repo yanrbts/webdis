@@ -15,7 +15,7 @@ def setfile():
 
     data = {
         "filename":"file7",
-        "uuid":"fileuuid7",
+        "fileuuid":"fileuuid7",
         "filepath":"/path/to/file7.txt",
         "machine":"f526255265340d994510f8d1652e1eb3"
     }

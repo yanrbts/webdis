@@ -3,7 +3,7 @@ from locust import HttpUser, TaskSet, task, between
 class UserBehavior(TaskSet):
     @task
     def test_post(self):
-        self.client.post("/fileget", json={"uuid":"fileuuid1"})
+        self.client.post("/fileget", json={"fileuuid":"fileuuid1"})
 
 class WebsiteUser(HttpUser):
     tasks = [UserBehavior]

@@ -15,8 +15,8 @@ def fileset(num):
     url = 'http://127.0.0.1:7379/fileset'
     data = {
         "filename":f"file{num}",
-        "uuid":f"fileuuid{num}",
-        "filepath":f"/path/to/file{num}.docx",
+        "fileuuid":f"fileuuid{num}",
+        "filepath":f"/path/to/file{num}.pdf",
         "machine":"f526255265340d994510f8d1652e1eb3"
     }
 

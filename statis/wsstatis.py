@@ -78,7 +78,8 @@ def get_today_userinfos(rds):
 
     members = rds.smembers(setkey)
     user_list = []
-    idx = 0
+    area_list = {}
+    device_list = {}
 
     for member in members:
         try:
@@ -87,18 +88,28 @@ def get_today_userinfos(rds):
             user = rds.hget(f"userkey:{member_str}", member_str)
             if user:
                 user_info = json.loads(user)
-                user_info['createTime'] = current_time
-                user_info['gatewayno'] = member_str
+
+                # Calculate regional data
+                area = user_info["area"]
+                if area not in area_list:
+                    area_list[area] = 1
+                else:
+                    area_list[area] += 1
+                # Computing device system data
+                device = user_info["device"]
+                if device not in device_list:
+                    device_list[device] = 1
+                else:
+                    device_list[device] += 1
+
                 user_info['onlineState'] = 1
-                user_info['provinceName'] = "甘肃"
-                user_info['cityName'] = "天水"
                 user_list.append(user_info)
             else:
                 print(f"No data found for member: {member_str}")
         except json.JSONDecodeError as e:
             print(f"Failed to decode JSON for member: {member}, Error: {e}")
 
-    return user_list
+    return user_list, area_list, device_list
 
 def get_login_counts(rds):
     """Get the number of people logged in today and the cumulative number of people logged in"""
@@ -183,7 +194,7 @@ async def statis_data(rds):
     user_total = 0
     file_total = get_filetotal(rds)
     today_login_count, total_login_count = get_login_counts(rds)
-    onlineusers = get_today_userinfos(rds)
+    onlineusers, area_list, device_list = get_today_userinfos(rds)
     
     data = {
         "today_user_count": today_login_count,
@@ -193,7 +204,9 @@ async def statis_data(rds):
         "usertotal": user_total,
         "filetotal": file_total,
         "fileext": suffix_map,
-        "online_users": onlineusers
+        "online_users": onlineusers,
+        "area_list": area_list,
+        "device_list": device_list
     }
     click.secho(f"[*] {json.dumps(data)}", fg="green")
     # click.secho(

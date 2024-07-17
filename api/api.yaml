@@ -21,6 +21,15 @@ paths:
                   username:
                     type: string
                     example: "13998011234"
+                  area:
+                    type: string
+                    example: "河北/廊坊"
+                  device:
+                    type: string
+                    example: "Android"
+                  logintime:
+                    type: string
+                    example: "2024-07-17 11:50:30"
                   flag:
                     type: integer
                     example: 1
@@ -75,7 +84,7 @@ paths:
                   type: string
                   example: "filename"
                   description: "文件名"
-                uuid:
+                fileuuid:
                   type: string
                   example: "fileuuid"
                   description: "文件uuid"
@@ -87,7 +96,7 @@ paths:
                   example: "f526255265340d994510f8d1652e1eb1"
               required:
                 - filename
-                - uuid
+                - fileuuid
                 - filepath
                 - machine
       responses:
@@ -158,7 +167,7 @@ paths:
                         machine:
                           type: string
                           example: "uuid"
-                        uuid:
+                        fileuuid:
                           type: string
                           example: "fileuuid"
                         filename:
@@ -204,7 +213,7 @@ paths:
                   type: string
                   example: "uuid"
                   description: "机器码"
-                uuid:
+                fileuuid:
                   type: string
                   example: "fileuuid"
                   description: "文件uuid"
@@ -227,7 +236,7 @@ paths:
                   description: "溯源类型由客户端定义(如果是1代表申请，2代表授权)"
               required:
                 - machine
-                - uuid
+                - fileuuid
                 - filename
                 - filepath
                 - username
@@ -265,7 +274,7 @@ paths:
             schema:
               type: object
               properties:
-                uuid:
+                fileuuid:
                   type: string
                   example: "fileuuid"
                 page:
@@ -273,7 +282,7 @@ paths:
                   example: 0
                   description: "游标，第一次查询传0，再次请求赋上次返回数据的游标数"
               required:
-                - uuid
+                - fileuuid
                 - page
       responses:
         '200':
@@ -295,7 +304,7 @@ paths:
                         machine:
                           type: string
                           example: "uuid"
-                        uuid:
+                        fileuuid:
                           type: string
                           example: "fileuuid"
                         filename:
@@ -366,7 +375,7 @@ paths:
                         filename:
                           type: string
                           example: "file1"
-                        uuid:
+                        fileuuid:
                           type: string
                           example: "file1uuid"
                         filepath:

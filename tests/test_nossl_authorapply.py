@@ -15,7 +15,7 @@ def settrace():
     number = random.randint(1, 1000000)
     data = {
         "machine":"f526255265340d994510f8d1652e1eb3",
-        "uuid":f"fileuuid{number}",
+        "fileuuid":f"fileuuid{number}",
         "filename":f"file{number}",
         "filepath":f"/path/to/file{number}.txt",
         "username":random_string(11),

@@ -19,7 +19,7 @@ def setfile():
 
     data = {
         "filename":"file7",
-        "uuid":"fileuuid7",
+        "fileuuid":"fileuuid7",
         "filepath":"/path/to/file7.txt",
         "machine":"f526255265340d994510f8d1652e1eb3"
     }
@@ -42,7 +42,7 @@ def settrace():
 
     data = {
         "machine":"f526255265340d994510f8d1652e1eb3",
-        "uuid":"fileuuid7",
+        "fileuuid":"fileuuid7",
         "username":random_string(11),
         "time":"2024-05-23",
         "action":0
@@ -65,7 +65,7 @@ def gettracespage(page):
     url = 'https://localhost:7379/filegettrace'
 
     data = {
-        "uuid":"fileuuid7",
+        "fileuuid":"fileuuid7",
         "page":page
     }
 
