@@ -1237,7 +1237,7 @@ void setCallback(redisAsyncContext *c, void *r, void *privdata) {
     if (reply == NULL) return;
 
     if (reply->type == REDIS_REPLY_ERROR) {
-		slog(cmd->w->s, WEBDIS_ERROR, reply->str, 0);
+		// slog(cmd->w->s, WEBDIS_ERROR, reply->str, 0);
     }
 }
 
