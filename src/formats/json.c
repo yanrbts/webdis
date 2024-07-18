@@ -1259,8 +1259,54 @@ void json_multi_reply(redisAsyncContext *c, void *r, void *privdata) {
 					cmd->rparam->param.fset.machine,
 					cmd->rparam->param.fset.fileuuid,
 					cmd->rparam->param.fset.data);
-	
 	redisAsyncCommand(c, json_exec_reply, cmd, "%s", "EXEC");
+}
+static void json_del_oldest_auth_reply(redisAsyncContext *c, void *r, void *privdata) {
+	char key[64];
+	redisReply *reply = (redisReply *)r;
+	int action = (int)((intptr_t)privdata);
+
+	if (reply == NULL) 
+		return;
+	
+	if (reply->type == REDIS_REPLY_ARRAY && reply->elements > 0) {
+		const char *oldest_date = reply->element[0]->str;
+		snprintf(key, sizeof(key), (action == 2 ? "auth:%s" : "apply:%s"), oldest_date);
+		redisAsyncCommand(c, NULL, NULL, "DEL %s", key);
+		redisAsyncCommand(c, NULL, NULL, "ZREM dates %s", oldest_date);
+	}
+}
+static void json_last_fiveday_auth_reply(redisAsyncContext *c, void *r, void *privdata) {
+	redisReply *reply = (redisReply *)r;
+	
+	if (reply == NULL) 
+		return;
+	
+	/* Determine whether there are more than 5 records. 
+	 * If there are more than 5 records, delete the earliest one.*/
+	if (reply->type == REDIS_REPLY_INTEGER 
+		&& reply->integer > 5) {
+		redisAsyncCommand(c, json_del_oldest_auth_reply, privdata, "ZRANGE dates 0 0");
+	}
+}
+/* Record the number of authorizations and applications in the last five days*/
+static void json_record_last_fiveday_auth(redisAsyncContext *c, int action) {
+	char today_str[11];
+	char key[64];
+	time_t now, timestamp;
+	struct tm *st;
+
+	now = time(NULL);
+	st = localtime(&now);
+	strftime(today_str, sizeof(today_str), "%Y-%m-%d", st);
+
+	snprintf(key, sizeof(key), (action == 2 ? "auth:%s" : "apply:%s"), today_str);
+	/* Increment the count for the current day */
+	redisAsyncCommand(c, NULL, NULL, "HINCRBY %s count 1", key);
+	/* Use an ordered set to record the date and add a timestamp as a score */
+	timestamp = time(NULL);
+    redisAsyncCommand(c, NULL, NULL, "ZADD dates %ld %s", timestamp, today_str);
+	redisAsyncCommand(c, json_last_fiveday_auth_reply, (void*)(intptr_t)action, "ZCARD dates");
 }
 
 void json_authmulti_reply(redisAsyncContext *c, void *r, void *privdata) {
@@ -1290,8 +1336,19 @@ void json_authmulti_reply(redisAsyncContext *c, void *r, void *privdata) {
 					cmd->rparam->param.tset.machine,
 					buffer,
 					cmd->rparam->param.tset.data);
+
+		/* Count the number of authorizations or applications in the last 5 days. 
+		 * The operation is a bit complicated and may affect performance.*/
+		json_record_last_fiveday_auth(c, ac);
 	}
-	
+	/* Used to store the Overall traceability information  
+	 * Convenient for large screen services to obtain this data */
+	redisAsyncCommand(c, NULL, NULL, "INCR total_trace_count");
+	/* Save the latest 20 traceability information to facilitate 
+	 * the large screen service to find the latest traceability information.*/
+	redisAsyncCommand(c, NULL, NULL, "LPUSH latest_trace %s", cmd->rparam->param.tset.data);
+	redisAsyncCommand(c, NULL, NULL, "LTRIM latest_trace 0 20");
+
 	redisAsyncCommand(c, json_authmulti_exec_reply, cmd, "%s", "EXEC");
 }
 

@@ -36,10 +36,12 @@ def settrace():
 
     data = {
         "machine":"f526255265340d994510f8d1652e1eb3",
-        "uuid":"fileuuid7",
+        "fileuuid":"fileuuid7",
+        "filename":"filetest7.txt",
+        "filepath":"path/to/filetest.txt",
         "username":random_string(11),
         "time":"2024-05-23",
-        "action":0
+        "action":1
     }
 
     json_data = json.dumps(data)
@@ -57,7 +59,7 @@ def gettracespage(page):
     url = 'http://127.0.0.1:7379/filegettrace'
 
     data = {
-        "uuid":"fileuuid7",
+        "fileuuid":"fileuuid7",
         "page":page
     }
 
@@ -91,6 +93,6 @@ def gettraces():
 
 if __name__ == "__main__":
     setfile()
-    for _ in range(30):
+    for _ in range(10):
         settrace()
     gettraces()

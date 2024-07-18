@@ -132,6 +132,70 @@ def get_login_counts(rds):
     except Exception as e:
         click.secho(f"[-] An error occurred: {e}", fg="red")
         return 0, 0
+
+def get_total_trace_count(rds):
+    """Get the total number of traceability information"""
+    try:
+        total_trace_count = rds.get('total_trace_count')
+        total_trace_count = int(total_trace_count) if total_trace_count else 0
+
+        return total_trace_count
+    except redis.ConnectionError as e:
+        click.secho(f"[-] Get Trace count Failed to connect to Redis: {e}", fg="red")
+        return 0
+    except Exception as e:
+        click.secho(f"[-] Get Trace count An error occurred: {e}", fg="red")
+        return 0
+
+def get_last_trace_info(rds):
+    """Get the latest 20 file traceability information"""
+    try:
+        last_trace = rds.lrange('latest_trace', 0, -1)
+
+        # Decode bytes to string
+        last_trace = [item.decode('utf-8') for item in last_trace]
+        # Convert to JSON
+        # last_trace_json = json.dumps(last_trace, indent=4)
+
+        return last_trace
+    except redis.ConnectionError as e:
+        click.secho(f"[-] Get Trace count Failed to connect to Redis: {e}", fg="red")
+        return []
+    except Exception as e:
+        click.secho(f"[-] Get Trace count An error occurred: {e}", fg="red")
+        return []
+
+def get_recent_auth_and_apply(rds):
+    """# Get the number of applications and authorizations in the last 5 days"""
+    try:
+        # Get the date of the last 5 days
+        dates = rds.zrevrange("dates", 0, 4)
+        data = {}
+        recent_date = []
+        recent_auths = []
+        recent_apply = []
+        for date in dates:
+            date = date.decode('utf-8')
+            # Get the number of authorizations in the last 5 days
+            count = int(rds.hget(f"auth:{date}", "count").decode('utf-8'))
+            recent_auths.append(count)
+
+            # Get the number of applications in the last 5 days
+            count = int(rds.hget(f"apply:{date}", "count").decode('utf-8'))
+            recent_apply.append(count)
+
+            recent_date.append(date)
+
+        data["datelist"] = recent_date
+        data["authlist"] = recent_auths
+        data["applylist"] = recent_apply 
+        return data
+    except redis.ConnectionError as e:
+        click.secho(f"[-] Get recent Auth and Apply count Failed to connect to Redis: {e}", fg="red")
+        return {}
+    except Exception as e:
+        click.secho(f"[-] Get recent Auth and Apply An error occurred: {e}", fg="red")
+        return {}
     
 def get_file(rds, keys):
     pipeline = rds.pipeline()  # 使用 Pipeline 执行批量操作
@@ -191,14 +255,20 @@ async def statis_data(rds):
 
     provinces = []
     filetype = []
+    last_traces = []
+    recent_record = {}
     user_total = 0
     file_total = get_filetotal(rds)
     today_login_count, total_login_count = get_login_counts(rds)
     onlineusers, area_list, device_list = get_today_userinfos(rds)
+    total_trace_counts = get_total_trace_count(rds)
+    last_traces = get_last_trace_info(rds)
+    recent_record = get_recent_auth_and_apply(rds)
     
     data = {
         "today_user_count": today_login_count,
         "total_login_count": total_login_count,
+        "total_trace_counts": total_trace_counts,
         "provinces": provinces,
         "filetype": filetype,
         "usertotal": user_total,
@@ -206,7 +276,9 @@ async def statis_data(rds):
         "fileext": suffix_map,
         "online_users": onlineusers,
         "area_list": area_list,
-        "device_list": device_list
+        "device_list": device_list,
+        "last_traces": last_traces,
+        "recent_count": recent_record
     }
     click.secho(f"[*] {json.dumps(data)}", fg="green")
     # click.secho(
