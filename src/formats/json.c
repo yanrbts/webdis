@@ -1231,13 +1231,13 @@ void json_hscan_reply(redisAsyncContext *c, void *r, void *privdata) {
 
 void setCallback(redisAsyncContext *c, void *r, void *privdata) {
 	(void)c;
-	struct cmd *cmd = privdata;
+	struct server *s = (struct server *)privdata;
 
     redisReply *reply = (redisReply *)r;
     if (reply == NULL) return;
 
     if (reply->type == REDIS_REPLY_ERROR) {
-		// slog(cmd->w->s, WEBDIS_ERROR, reply->str, 0);
+		slog(s, WEBDIS_ERROR, reply->str, 0);
     }
 }
 
@@ -1248,13 +1248,13 @@ void json_multi_reply(redisAsyncContext *c, void *r, void *privdata) {
     if (reply == NULL) 
 		return;
 
-	redisAsyncCommand(c, setCallback, NULL, 
+	redisAsyncCommand(c, setCallback, cmd->w->s, 
 					"HSET filekey:%s %s %s", 
 					cmd->rparam->param.fset.fileuuid,
 					cmd->rparam->param.fset.fileuuid,
 					cmd->rparam->param.fset.data);
 	
-	redisAsyncCommand(c, setCallback, NULL, 
+	redisAsyncCommand(c, setCallback, cmd->w->s, 
 					"HSET machine:%s %s %s", 
 					cmd->rparam->param.fset.machine,
 					cmd->rparam->param.fset.fileuuid,
@@ -1317,7 +1317,7 @@ void json_authmulti_reply(redisAsyncContext *c, void *r, void *privdata) {
     if (reply == NULL) 
 		return;
 
-	redisAsyncCommand(c, setCallback, NULL, 
+	redisAsyncCommand(c, setCallback, cmd->w->s, 
 					"HSET filekey:%s %s %s", 
 					cmd->rparam->param.tset.fileuuid,
 					cmd->rparam->param.tset.traceid,
@@ -1331,7 +1331,7 @@ void json_authmulti_reply(redisAsyncContext *c, void *r, void *privdata) {
 	if (ac == 1 || ac == 2) {
 		char buffer[64] = {0};
 		snprintf(buffer, sizeof(buffer), ac == 2 ? "auth:%lld" : "apply:%lld", ustime());
-		redisAsyncCommand(c, setCallback, NULL, 
+		redisAsyncCommand(c, setCallback, cmd->w->s, 
 					"HSET machine:%s %s %s", 
 					cmd->rparam->param.tset.machine,
 					buffer,

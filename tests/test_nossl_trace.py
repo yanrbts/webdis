@@ -41,7 +41,7 @@ def settrace():
         "filepath":"path/to/filetest.txt",
         "username":random_string(11),
         "time":"2024-05-23",
-        "action":1
+        "action":2
     }
 
     json_data = json.dumps(data)

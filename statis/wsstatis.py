@@ -177,12 +177,15 @@ def get_recent_auth_and_apply(rds):
         for date in dates:
             date = date.decode('utf-8')
             # Get the number of authorizations in the last 5 days
-            count = int(rds.hget(f"auth:{date}", "count").decode('utf-8'))
+            count = rds.hget(f"auth:{date}", "count")
+            count = int(count.decode('utf-8')) if count else 0
             recent_auths.append(count)
 
             # Get the number of applications in the last 5 days
-            count = int(rds.hget(f"apply:{date}", "count").decode('utf-8'))
+            count = rds.hget(f"apply:{date}", "count")
+            count = int(count.decode('utf-8')) if count else 0
             recent_apply.append(count)
+
 
             recent_date.append(date)
 
