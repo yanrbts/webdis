@@ -93,6 +93,6 @@ def gettraces():
 
 if __name__ == "__main__":
     setfile()
-    for _ in range(10):
+    for _ in range(10000):
         settrace()
     gettraces()

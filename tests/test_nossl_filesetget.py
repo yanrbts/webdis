@@ -16,7 +16,7 @@ def fileset(num):
     data = {
         "filename":f"file{num}",
         "fileuuid":f"fileuuid{num}",
-        "filepath":f"/path/to/file{num}.pdf",
+        "filepath":f"/path/to/file{num}.doc",
         "machine":"f526255265340d994510f8d1652e1eb3"
     }
 
@@ -52,7 +52,7 @@ def fileget(num):
         print('Response:', response.text)
 
 if __name__ == "__main__":
-    for i in range(1000):
+    for i in range(300):
         tmp = random_string(8)
         fileset(tmp)
         # fileget(tmp)

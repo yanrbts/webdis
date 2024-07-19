@@ -5,12 +5,20 @@ import json
 import click
 import sys
 import signal
+import os
+import time
 from datetime import datetime
 import argparse
+from rich.console import Console
+from rich.tree import Tree
 
 parser = argparse.ArgumentParser(description='Description of your program')
 args = None
 suffix_map = {}
+wsip = None
+wsport = None
+rdsip = None
+rdsport = None
 
 def logo():
 
@@ -33,11 +41,12 @@ def get_current_date():
 
 def init_redis():
     try:
-        ip = "127.0.0.1" if args.redisip is None else args.redisip
-        port = 6379 if args.redisport is None else args.redisport
-        rds = redis.Redis(host=ip, port=port, db=0)
+        global rdsip, rdsport
+        rdsip = "127.0.0.1" if args.redisip is None else args.redisip
+        rdsport = 6379 if args.redisport is None else args.redisport
+        rds = redis.Redis(host=rdsip, port=rdsport, db=0)
         rds.ping()
-        click.secho(f"[*] Connected to ({ip}:{port}) Redis!", fg="green")
+        click.secho(f"[*] Connected to ({rdsip}:{rdsport}) Redis!", fg="green")
         return rds
     except redis.ConnectionError as e:
         click.secho(f"[-] Failed to connect to Redis: {e}", fg="red")
@@ -78,8 +87,6 @@ def get_today_userinfos(rds):
 
     members = rds.smembers(setkey)
     user_list = []
-    area_list = {}
-    device_list = {}
 
     for member in members:
         try:
@@ -90,17 +97,17 @@ def get_today_userinfos(rds):
                 user_info = json.loads(user)
 
                 # Calculate regional data
-                area = user_info["area"]
-                if area not in area_list:
-                    area_list[area] = 1
-                else:
-                    area_list[area] += 1
-                # Computing device system data
-                device = user_info["device"]
-                if device not in device_list:
-                    device_list[device] = 1
-                else:
-                    device_list[device] += 1
+                # area = user_info["area"]
+                # if area not in area_list:
+                #     area_list[area] = 1
+                # else:
+                #     area_list[area] += 1
+                # # Computing device system data
+                # device = user_info["device"]
+                # if device not in device_list:
+                #     device_list[device] = 1
+                # else:
+                #     device_list[device] += 1
 
                 user_info['onlineState'] = 1
                 user_list.append(user_info)
@@ -109,7 +116,7 @@ def get_today_userinfos(rds):
         except json.JSONDecodeError as e:
             print(f"Failed to decode JSON for member: {member}, Error: {e}")
 
-    return user_list, area_list, device_list
+    return user_list
 
 def get_login_counts(rds):
     """Get the number of people logged in today and the cumulative number of people logged in"""
@@ -252,29 +259,99 @@ def get_filetotal(rds):
         click.secho(f"[-] An error occurred: {e}", fg="red")
         return 0
 
+def get_area_device_bykeys(rds, keys):
+    pipeline = rds.pipeline()  # 使用 Pipeline 执行批量操作
+    area_map = {}
+    device_map = {}
+
+    # 批量获取所有键的数据
+    for key in keys:
+        pipeline.hgetall(key)
+
+    results = pipeline.execute()
+
+    # 解析结果
+    for key, value in zip(keys, results):
+        key = key.decode('utf-8')  # 解析 key
+        if value:
+            for inner_key, json_data in value.items():
+                try:
+                    data = json.loads(json_data.decode('utf-8'))
+
+                    # 处理区域计数
+                    area = data.get('area', '')
+                    if area:
+                        area_map[area] = area_map.get(area, 0) + 1
+
+                    # 处理设备计数
+                    device = data.get('device', '')
+                    if device:
+                        device_map[device] = device_map.get(device, 0) + 1
+
+                except json.JSONDecodeError as e:
+                    click.secho(f"[-] JSON decode error for key '{key}', inner key '{inner_key}': {e}", fg="red")
+                except Exception as e:
+                    click.secho(f"[-] Error processing data for key '{key}', inner key '{inner_key}': {e}", fg="red")
+
+    return area_map, device_map
+
+def get_total_area_and_device(rds):
+    area_map = {}
+    device_map = {}
+
+    try:
+        cursor = '0'
+        pattern = 'userkey:*'
+        
+        while True:
+            cursor, keys = rds.scan(cursor, match=pattern, count=1000)
+            if keys:
+                # 获取 area 和 device 数据
+                new_area_map, new_device_map = get_area_device_bykeys(rds, keys)
+
+                # 合并结果
+                for area, count in new_area_map.items():
+                    if area in area_map:
+                        area_map[area] += count
+                    else:
+                        area_map[area] = count
+
+                for device, count in new_device_map.items():
+                    if device in device_map:
+                        device_map[device] += count
+                    else:
+                        device_map[device] = count
+
+            if cursor == 0:
+                break
+
+    except redis.ConnectionError as e:
+        click.secho(f"[-] Get Area and Device Failed to connect to Redis: {e}", fg="red")
+    except Exception as e:
+        click.secho(f"[-] Get Area and Device An error occurred: {e}", fg="red")
+
+    sorted_device_map = dict(sorted(device_map.items(), key=lambda item: item[1], reverse=True))
+    return area_map, sorted_device_map
+
+
 async def statis_data(rds):
     global suffix_map
     suffix_map.clear()
 
-    provinces = []
-    filetype = []
     last_traces = []
     recent_record = {}
-    user_total = 0
     file_total = get_filetotal(rds)
     today_login_count, total_login_count = get_login_counts(rds)
-    onlineusers, area_list, device_list = get_today_userinfos(rds)
+    onlineusers = get_today_userinfos(rds)
     total_trace_counts = get_total_trace_count(rds)
     last_traces = get_last_trace_info(rds)
     recent_record = get_recent_auth_and_apply(rds)
+    area_list, device_list = get_total_area_and_device(rds)
     
     data = {
         "today_user_count": today_login_count,
         "total_login_count": total_login_count,
         "total_trace_counts": total_trace_counts,
-        "provinces": provinces,
-        "filetype": filetype,
-        "usertotal": user_total,
         "filetotal": file_total,
         "fileext": suffix_map,
         "online_users": onlineusers,
@@ -283,20 +360,77 @@ async def statis_data(rds):
         "last_traces": last_traces,
         "recent_count": recent_record
     }
-    click.secho(f"[*] {json.dumps(data)}", fg="green")
-    # click.secho(
-    #     f"[*] today count:{today_login_count},"
-    #     f" total count:{total_login_count},"
-    #     f" total files:{file_total},"
-    #     f" file type:{json.dumps(suffix_map)}", 
-    #     f" today users:{json.dumps(onlineusers)}", fg="green")
     return data
+
+def countdown(total_seconds):
+    while total_seconds > 0:
+        if total_seconds >= 3600:
+            hours = total_seconds // 3600
+            minutes = (total_seconds % 3600) // 60
+            seconds = total_seconds % 60
+            print(f"\033[92m[-] Time remaining: {hours:.0f}h {minutes:02.0f}m {seconds:05.2f}s \033[0m", end="\r")
+            time.sleep(1)
+        elif total_seconds >= 60:
+            minutes = total_seconds // 60
+            seconds = total_seconds % 60
+            print(f"\033[92m[-] Time remaining: {minutes:.0f}m {seconds:05.2f}s \033[0m", end="\r")
+            time.sleep(1)
+        else:
+            print(f"\033[92m[-] Time remaining: {total_seconds:.2f}s \033[0m", end="\r")
+            time.sleep(1)
+        total_seconds -= 1
+
+# Display data using a tree structure for easy observation. 
+# If the amount of data in the printed log is large, 
+# it will be difficult to read.
+
+def add_branch(tree, key, value):
+    if key == "online_users" or key == "last_traces":
+        # 只显示 online_users 节点的子节点数量
+        if isinstance(value, list):
+            count = len(value)
+            tree.add(f"[green]{key}[/green]: [yellow]{count}[/yellow]")
+        return
+    
+    if isinstance(value, dict):
+        branch = tree.add(f"[bold]{key}[/bold]")
+        for k, v in value.items():
+            add_branch(branch, k, v)
+    elif isinstance(value, list):
+        branch = tree.add(f"[bold]{key}[/bold]")
+        for i, v in enumerate(value):
+            add_branch(branch, f"[{i}]", v)
+    else:
+        tree.add(f"[green]{key}[/green]: [yellow]{value}[/yellow]")
+
+def show_tree(data, s, ms):
+    console = Console()
+    tree = Tree(f"ROOT({wsip}:{wsport})")
+
+    for key, value in data.items(): 
+        add_branch(tree, key, value)
+    os.system('clear')
+    print(logo())
+    print(f"\033[92m[*] Wsstatis server: {wsip}:{wsport} \033[0m")
+    print(f"\033[92m[*] Redis server: {rdsip}:{rdsport} \033[0m")
+    print(f"\033[92m[*] Execution Time: {s}.{ms:03d} seconds \033[0m")
+    console.print(tree)
+    countdown(args.n)
 
 async def websocket_handler(websocket, path, rds):
     while True:
         try:
+            start_time = time.time()  # 记录开始时间
             data = await statis_data(rds)
             await websocket.send(json.dumps(data))
+            end_time = time.time()  # 记录结束时间
+
+            elapsed_time = end_time - start_time  # 计算耗时
+            seconds = int(elapsed_time)  # 秒部分
+            milliseconds = int((elapsed_time - seconds) * 1000)  # 毫秒部分
+
+
+            show_tree(data, seconds, milliseconds)
             # Adjust the refresh interval to reduce the pressure on Redis
             await asyncio.sleep(args.n)  
         except websockets.ConnectionClosedOK as e:
@@ -314,10 +448,11 @@ async def main():
     global stop_event
     stop_event = asyncio.Event()
 
-    ip = "0.0.0.0" if args.wsip is None else args.wsip
-    port = 8765 if args.wsport is None else args.wsport
-    click.secho(f"[*] websocket server ({args.wsip}:{port})!", fg="green")
-    async with websockets.serve(lambda ws, path: websocket_handler(ws, path, rds), ip, port):
+    global wsip, wsport
+    wsip = "0.0.0.0" if args.wsip is None else args.wsip
+    wsport = 8765 if args.wsport is None else args.wsport
+    click.secho(f"[*] websocket server ({wsip}:{wsport})!", fg="green")
+    async with websockets.serve(lambda ws, path: websocket_handler(ws, path, rds), wsip, wsport):
         await stop_event.wait()
 
 def signal_handler(sig, frame):
