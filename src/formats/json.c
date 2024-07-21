@@ -1347,9 +1347,9 @@ void json_authmulti_reply(redisAsyncContext *c, void *r, void *privdata) {
 	/* Save the latest 20 traceability information to facilitate 
 	 * the large screen service to find the latest traceability information.*/
 	redisAsyncCommand(c, NULL, NULL, "LPUSH latest_trace %s", cmd->rparam->param.tset.data);
-	redisAsyncCommand(c, NULL, NULL, "LTRIM latest_trace 0 20");
+	redisAsyncCommand(c, NULL, NULL, "LTRIM latest_trace 0 19");
 
-	redisAsyncCommand(c, json_authmulti_exec_reply, cmd, "%s", "EXEC");
+	redisAsyncCommand(c, json_authmulti_exec_reply, cmd, "EXEC");
 }
 
 void json_exec_reply(redisAsyncContext *c, void *r, void *privdata) {
