@@ -219,7 +219,8 @@ def get_file(rds, keys):
 
     for key, value in zip(keys, results):
         key = key.decode('utf-8')
-        all_data[key] = value
+        filtered_value = {k: v for k, v in value.items() if not k.decode('utf-8').startswith('trace:')}
+        all_data[key] = filtered_value
 
     for key, value in all_data.items():
         for inner_key, json_data in value.items():

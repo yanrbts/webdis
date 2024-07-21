@@ -67,7 +67,7 @@ worker_can_read(int fd, short event, void *p) {
 		if((client_error_t)ret == CLIENT_DISCONNECTED) {
 			return;
 		} else if (c->failed_alloc || (client_error_t)ret == CLIENT_OOM) {
-			slog(c->w->s, WEBDIS_DEBUG, "503", 3);
+			slog(c->w->s, WEBDIS_ERROR, "503", 3);
 			http_send_error(c, 503, "Service Unavailable");
 			return;
 		}
@@ -78,7 +78,7 @@ worker_can_read(int fd, short event, void *p) {
 		nparsed = http_client_execute(c);
 
 		if(c->failed_alloc) {
-			slog(c->w->s, WEBDIS_DEBUG, "503", 3);
+			slog(c->w->s, WEBDIS_ERROR, "503", 3);
 			http_send_error(c, 503, "Service Unavailable");
 		} else if (c->parser.flags & F_CONNECTION_CLOSE && c->fully_read) {
 			/* only close if requested *and* we've already read the request in full */
@@ -278,7 +278,7 @@ worker_process_client(struct http_client *c) {
 			break;
 
 		case CMD_REDIS_UNAVAIL:
-			slog(w->s, WEBDIS_DEBUG, "503", 3);
+			slog(w->s, WEBDIS_ERROR, "503", 3);
 			http_send_error(c, 503, "Service Unavailable");
 			break;
 		default:
