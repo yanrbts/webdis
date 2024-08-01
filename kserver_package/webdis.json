@@ -1,0 +1,39 @@
+{
+  "redis_host": "127.0.0.1",
+  "redis_port": 6379,
+  "redis_auth": null,
+
+  "http_host": "0.0.0.0",
+  "http_port": 7379,
+
+  "threads": 10,
+  "pool_size": 20,
+
+  "daemonize": false,
+  "websockets": false,
+
+  "database": 0,
+
+  "acl": [
+    {
+      "disabled": [ "DEBUG" ]
+    },
+    {
+      "http_basic_auth": "user:password",
+      "enabled": [ "DEBUG" ]
+    }
+  ],
+
+  "hiredis": {
+    "keep_alive_sec": 15
+  },
+
+  "verbosity": 4,
+
+  "httpssl": {
+    "cert_file": "./cert/server.pem",
+    "key_file": "./cert/server.key",
+    "ca_cert_file": "./cert/rootCA.pem",
+    "protocols": "tlsv1.2 tlsv1.3"
+  }
+}

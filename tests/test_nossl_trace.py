@@ -14,9 +14,9 @@ def setfile():
     url = 'http://127.0.0.1:7379/fileset'
 
     data = {
-        "filename":"file7",
-        "fileuuid":"fileuuid7",
-        "filepath":"/path/to/file7.txt",
+        "filename":"fileh874",
+        "fileuuid":"fileuuidh874",
+        "filepath":"/path/to/fileh874.ppt",
         "machine":"f526255265340d994510f8d1652e1eb3"
     }
 
@@ -32,7 +32,7 @@ def setfile():
         print('Response:', response.text)
 
 def settrace():
-    url = 'http://127.0.0.1:7379/filesettrace'
+    url = 'http://192.168.29.128:7379/filesettrace'
 
     data = {
         "machine":"f526255265340d994510f8d1652e1eb3",
@@ -41,7 +41,7 @@ def settrace():
         "filepath":"path/to/filetest.txt",
         "username":random_string(11),
         "time":"2024-05-23",
-        "action":2
+        "action":1
     }
 
     json_data = json.dumps(data)
@@ -56,7 +56,7 @@ def settrace():
         print('Response:', response.text)
 
 def gettracespage(page):
-    url = 'http://127.0.0.1:7379/filegettrace'
+    url = 'http://192.168.29.128:7379/filegettrace'
 
     data = {
         "fileuuid":"fileuuid7",
@@ -93,6 +93,6 @@ def gettraces():
 
 if __name__ == "__main__":
     setfile()
-    for _ in range(10000):
+    for _ in range(1000):
         settrace()
     gettraces()

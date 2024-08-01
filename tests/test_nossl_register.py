@@ -91,15 +91,22 @@ def generate_random_uuid():
 def register():
     url = "http://127.0.0.1:7379/register"
 
-    data = {
-        "machine": generate_random_uuid(),
-        "username": random_username(),
-        "area": random_area(),
-        "device": random_device(),
-        "logintime": generate_random_today_time(),
-        "flag":0
+    # data = {
+    #     "machine": generate_random_uuid(),
+    #     "username": random_username(),
+    #     "area": random_area(),
+    #     "device": random_device(),
+    #     "logintime": generate_random_today_time(),
+    #     "flag":0
+    # }
+    data = 	{
+        "area":"后期接入地图",
+        "device":"Android",
+        "flag":0,
+        "logintime":"2024-08-01 07:42:45",
+        "username":"66",
+        "machine":"56ca08a1cab9111"
     }
-
     json_data = json.dumps(data)
     response = requests.post(url, data=json_data, 
                              headers={'Content-Type': 'application/json'})
@@ -111,5 +118,5 @@ def register():
         print('Response:', response.text)
 
 if __name__ == "__main__":
-    for _ in range(300):
+    for _ in range(1):
         register()

@@ -1121,6 +1121,12 @@ void json_register_reply(redisAsyncContext *c, void *r, void *privdata) {
 				/* User does not exist Start insert 
 				 * Here, you must change the flag to insert to 
 				 * facilitate the judgment during callback*/;
+				char buffer[1024] = {0};
+				snprintf(buffer, sizeof(buffer), "HSET userkey:%s %s %s", 
+								cmd->rparam->param.ureg.machine,
+								cmd->rparam->param.ureg.machine,
+								cmd->rparam->param.ureg.data);
+				printf("%s\n",buffer);
 				cmd->rparam->param.ureg.flag = 1;
 				redisAsyncCommand(c, json_register_reply, cmd, 
 								"HSET userkey:%s %s %s", 

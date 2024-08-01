@@ -1,0 +1,13 @@
+[Unit]
+Description=Kserver Service
+After=network-online.target
+
+[Service]
+WorkingDirectory=/usr/local/bin
+ExecStart=/usr/local/bin/kserver
+Restart=always
+User=nobody
+Group=nogroup
+
+[Install]
+WantedBy=multi-user.target

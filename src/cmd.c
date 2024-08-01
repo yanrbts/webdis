@@ -20,6 +20,7 @@
 #include <hiredis/hiredis.h>
 #include <hiredis/async.h>
 #include <ctype.h>
+#include <stdarg.h>
 
 struct cmd *
 cmd_new(struct http_client *client, int count) {
@@ -517,7 +518,13 @@ exec_cmd(struct worker *w,
 
 	/* send it off! */
 	if(cmd->ac) {
-		cmd_send_format(cmd, callback, cmdline);
+		/* This method will only be executed if the user information 
+		 * is refreshed after mandatory registration. */
+		if (fy == WB_REGISTER && r->param.ureg.flag == 1)
+			cmd_send_format_ex(cmd, callback, cmdline, r);
+		else
+			cmd_send_format(cmd, callback, cmdline);
+			
 		// cmd_send(cmd, callback);
 		/* If you do not set an asynchronous callback function, 
 		 * you must release the cmd variable, otherwise a memory 
@@ -556,21 +563,25 @@ start_cmd_run(struct worker *w,
 		 * If it exists, it will be directly returned to the client. 
 		 * If it does not exist, insert it and send it to the client. user information*/
 		if (r->param.ureg.flag == 1) {
-			snprintf(buffer, sizeof(buffer), 
-					api->cmdline,
-					r->param.ureg.machine,
-					r->param.ureg.machine,
-					r->param.ureg.data);
+			// snprintf(buffer, sizeof(buffer), 
+			// 		api->cmdline,
+			// 		r->param.ureg.machine,
+			// 		r->param.ureg.machine,
+			// 		r->param.ureg.data);
+			if(exec_cmd(w, client, api->cmdline, api->replyfunc, 0, r, WB_REGISTER) == -1)
+				goto end;
 		} else {
 			snprintf(buffer, sizeof(buffer),
 					"HGET userkey:%s %s",
 					r->param.ureg.machine,
 					r->param.ureg.machine);
 			api->count = 3;
+
+			if(exec_cmd(w, client, buffer, api->replyfunc, 0, r, WB_REGISTER) == -1)
+				goto end;
 		}
 		
-		if(exec_cmd(w, client, buffer, api->replyfunc, 0, r, WB_REGISTER) == -1)
-			goto end;
+		
 		return CMD_SENT;
 	case WB_AUTHSET:
 	case WB_FILESET:
@@ -668,6 +679,20 @@ cmd_send_format(struct cmd *cmd, formatting_fun f_format, const char *cmdline) {
 	redisAsyncCommand(cmd->ac, f_format, 
 					f_format == NULL ? NULL : cmd,
 					cmdline);
+}
+
+/* This method is added only to deal with the problem that the cmd_send_format 
+ * method fails to execute due to legal spaces in the data. Currently, 
+ * the main problem is that spaces will appear in the user registration 
+ * time format "logintime":"2024-08-01 07:42:44".*/
+void
+cmd_send_format_ex(struct cmd *cmd, formatting_fun f_format, const char *fmt, const struct rqparam *r) {
+	redisAsyncCommand(cmd->ac, f_format, 
+				f_format == NULL ? NULL : cmd,
+				fmt, 
+				r->param.ureg.machine,
+				r->param.ureg.machine,
+				r->param.ureg.data);
 }
 
 /**

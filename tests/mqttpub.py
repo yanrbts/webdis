@@ -44,7 +44,7 @@
 import paho.mqtt.client as mqtt
 import uuid
 
-broker = "192.168.1.105"
+broker = "192.168.124.204"
 port = 1883
 topic = "test/topic"
 

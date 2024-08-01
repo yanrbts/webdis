@@ -15,4 +15,6 @@ pubsub
 *.ext
 *.srl
 *.pfx
+kserver
+kserver_package.tar.gz
 __pycache__/
