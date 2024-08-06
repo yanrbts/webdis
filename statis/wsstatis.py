@@ -44,7 +44,11 @@ def init_redis():
         global rdsip, rdsport
         rdsip = "127.0.0.1" if args.redisip is None else args.redisip
         rdsport = 6379 if args.redisport is None else args.redisport
-        pool = redis.ConnectionPool(host=rdsip, port=rdsport, db=0, max_connections=10000)
+        pool = redis.ConnectionPool(host=rdsip, port=rdsport, 
+                                    db=0, 
+                                    max_connections=10000,
+                                    socket_timeout=10,
+                                    socket_connect_timeout=10)
 
         # rds = redis.Redis(host=rdsip, port=rdsport, db=0)
         rds = redis.Redis(connection_pool=pool)
