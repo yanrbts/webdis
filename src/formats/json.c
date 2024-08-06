@@ -1126,7 +1126,6 @@ void json_register_reply(redisAsyncContext *c, void *r, void *privdata) {
 								cmd->rparam->param.ureg.machine,
 								cmd->rparam->param.ureg.machine,
 								cmd->rparam->param.ureg.data);
-				printf("%s\n",buffer);
 				cmd->rparam->param.ureg.flag = 1;
 				redisAsyncCommand(c, json_register_reply, cmd, 
 								"HSET userkey:%s %s %s", 
