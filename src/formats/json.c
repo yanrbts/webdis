@@ -1041,7 +1041,7 @@ static void sismember_reply(redisAsyncContext *c, void *r, void *privdata) {
 					redisAsyncCommand(c, NULL, NULL, "SADD %s %s", set_key, u->data);
 					/* Used to store the login count for the day */
 					redisAsyncCommand(c, NULL, NULL, "HINCRBY %s count 1", counter_key);
-					redisAsyncCommand(c, NULL, NULL, "INCR total_login_count");
+					// redisAsyncCommand(c, NULL, NULL, "INCR total_login_count");
 					/* Set the expiration time of the collection and counter keys to the next morning */
 					redisAsyncCommand(c, NULL, NULL, "EXPIRE %s %d", set_key, seconds_to_midnight);
 					redisAsyncCommand(c, NULL, NULL, "EXPIRE %s %d", counter_key, seconds_to_midnight);
@@ -1118,14 +1118,13 @@ void json_register_reply(redisAsyncContext *c, void *r, void *privdata) {
 				json_object_set_new(jroot, "flag", json_string("OK"));
 				json_object_set_new(jroot, "data", json_string(reply->str));
 			} else {
+				/* Only when the user query does not exist will the total number 
+				 * of users be increased by 1 when data is inserted. 
+				 * Updated user information will not be recorded.*/
+				redisAsyncCommand(c, NULL, NULL, "INCR total_login_count");
 				/* User does not exist Start insert 
 				 * Here, you must change the flag to insert to 
 				 * facilitate the judgment during callback*/;
-				char buffer[1024] = {0};
-				snprintf(buffer, sizeof(buffer), "HSET userkey:%s %s %s", 
-								cmd->rparam->param.ureg.machine,
-								cmd->rparam->param.ureg.machine,
-								cmd->rparam->param.ureg.data);
 				cmd->rparam->param.ureg.flag = 1;
 				redisAsyncCommand(c, json_register_reply, cmd, 
 								"HSET userkey:%s %s %s", 

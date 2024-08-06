@@ -89,7 +89,7 @@ def generate_random_uuid():
     return random_uuid
 
 def register():
-    url = "http://127.0.0.1:7379/register"
+    url = "http://192.168.29.128:7379/register"
 
     data = {
         "machine": generate_random_uuid(),
@@ -111,5 +111,5 @@ def register():
         print('Response:', response.text)
 
 if __name__ == "__main__":
-    for _ in range(1):
+    for _ in range(100):
         register()
