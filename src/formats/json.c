@@ -1148,7 +1148,7 @@ static void sismember_start(redisAsyncContext *c, struct cmd *cmd) {
 	int seconds_to_midnight = (int)difftime(expiry_time, now);
 
 	// Execute the Lua script with the necessary keys and arguments
-	redisAsyncCommand(c, sismember_start_reply, NULL, "EVAL %s 2 %s %s %s %d",
+	redisAsyncCommand(c, sismember_start_reply, (void*)ud, "EVAL %s 2 %s %s %s %d",
 		lua_script, set_key, counter_key, ud->data, seconds_to_midnight);
 }
 
