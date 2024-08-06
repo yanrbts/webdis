@@ -1092,24 +1092,34 @@ static void sismember_start_reply(redisAsyncContext *c, void *r, void *privdata)
 
 	if (reply == NULL) {
 		slog(u->s, WEBDIS_ERROR, "Null reply received", 0);
-		free(u->data);
-		free(u);
-		return;
+		goto end;
 	}
 
 	if (reply->type == REDIS_REPLY_ERROR) {
 		slog(u->s, WEBDIS_ERROR, reply->str, 0);
-		free(u->data);
-		free(u);
-		return;
+		goto end;
 	}
 
-	if (reply->type == REDIS_REPLY_INTEGER && reply->integer == 1) {
-		slog(u->s, WEBDIS_INFO, "Login recorded successfully", 0);
+	if (reply->type == REDIS_REPLY_INTEGER) {
+		if (reply->integer == 1) {
+			slog(u->s, WEBDIS_INFO, "Login recorded successfully", 0);
+		} else if (reply->integer == 0) {
+			slog(u->s, WEBDIS_INFO, "Login not recorded, user already logged in", 0);
+		} else {
+			char buff[1024];
+			snprintf(buff, sizeof(buff), "Unexpected integer reply: %lld", reply->integer);
+			slog(u->s, WEBDIS_ERROR, buff, 0);
+		}
+	} else if (reply->type == REDIS_REPLY_STRING) {
+		char buff[1024];
+		snprintf(buff, sizeof(buff), "Reply is a string: %s", reply->str);
+		slog(u->s, WEBDIS_INFO, buff, 0);
 	} else {
-		slog(u->s, WEBDIS_INFO, "Login not recorded, user already logged in", 0);
+		char buff[1024];
+		snprintf(buff, sizeof(buff), "Unexpected reply type: %d", reply->type);
+		slog(u->s, WEBDIS_ERROR, buff, 0);
 	}
-
+end:
 	free(u->data);
 	free(u);
 }
@@ -1136,8 +1146,10 @@ static void sismember_start(redisAsyncContext *c, struct cmd *cmd) {
 		"    redis.call('HINCRBY', counter_key, 'count', 1) "
 		"    redis.call('EXPIRE', set_key, expiry) "
 		"    redis.call('EXPIRE', counter_key, expiry) "
-		"end "
-		"return true";
+		"    return 'Added' "
+		"else "
+        "    return 'Already Exists' "
+        "end";
 
 	
 	snprintf(counter_key, sizeof(counter_key), "login_count:%s", current_date);

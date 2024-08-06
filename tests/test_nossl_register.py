@@ -111,5 +111,5 @@ def register():
         print('Response:', response.text)
 
 if __name__ == "__main__":
-    for _ in range(100):
+    for _ in range(10000):
         register()
