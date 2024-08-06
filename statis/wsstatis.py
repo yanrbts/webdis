@@ -80,41 +80,57 @@ def get_usertotal(rds):
 
 #     return user_list
 
+# def get_today_userinfos(rds):
+#     current_date = datetime.now().strftime("%Y-%m-%d")
+#     setkey = f"login_users:{current_date}"
+#     current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+#     members = rds.smembers(setkey)
+#     user_list = []
+
+#     for member in members:
+#         try:
+#             # 将 member 解码为字符串
+#             member_str = member.decode('utf-8')
+#             user = rds.hget(f"userkey:{member_str}", member_str)
+#             if user:
+#                 user_info = json.loads(user)
+
+#                 user_info['onlineState'] = 1
+#                 user_list.append(user_info)
+#             else:
+#                 print(f"No data found for member: {member_str}")
+#         except json.JSONDecodeError as e:
+#             print(f"Failed to decode JSON for member: {member}, Error: {e}")
+
+#     return user_list
+    
 def get_today_userinfos(rds):
     current_date = datetime.now().strftime("%Y-%m-%d")
     setkey = f"login_users:{current_date}"
-    current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     members = rds.smembers(setkey)
     user_list = []
 
+    pipeline = rds.pipeline()
+
     for member in members:
-        try:
-            # 将 member 解码为字符串
-            member_str = member.decode('utf-8')
-            user = rds.hget(f"userkey:{member_str}", member_str)
-            if user:
+        member_str = member.decode('utf-8')
+        pipeline.hget(f"userkey:{member_str}", member_str)
+
+    results = pipeline.execute()
+
+    for member, user in zip(members, results):
+        member_str = member.decode('utf-8')
+        if user:
+            try:
                 user_info = json.loads(user)
-
-                # Calculate regional data
-                # area = user_info["area"]
-                # if area not in area_list:
-                #     area_list[area] = 1
-                # else:
-                #     area_list[area] += 1
-                # # Computing device system data
-                # device = user_info["device"]
-                # if device not in device_list:
-                #     device_list[device] = 1
-                # else:
-                #     device_list[device] += 1
-
                 user_info['onlineState'] = 1
                 user_list.append(user_info)
-            else:
-                print(f"No data found for member: {member_str}")
-        except json.JSONDecodeError as e:
-            print(f"Failed to decode JSON for member: {member}, Error: {e}")
+            except json.JSONDecodeError as e:
+                print(f"Failed to decode JSON for member: {member_str}, Error: {e}")
+        else:
+            print(f"No data found for member: {member_str}")
 
     return user_list
 
