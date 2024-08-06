@@ -1011,60 +1011,112 @@ static time_t get_expiry_time() {
     return mktime(tm_info);
 }
 
-static void sismember_reply(redisAsyncContext *c, void *r, void *privdata) {
-	char current_date[20];
-	char counter_key[256];
-	char set_key[256];
-	redisReply *reply = r;
-	struct userdata *u = privdata;
-	time_t expiry_time, now;
-	int seconds_to_midnight;
+// static void sismember_reply(redisAsyncContext *c, void *r, void *privdata) {
+// 	char current_date[20];
+// 	char counter_key[256];
+// 	char set_key[256];
+// 	redisReply *reply = r;
+// 	struct userdata *u = privdata;
+// 	time_t expiry_time, now;
+// 	int seconds_to_midnight;
 
-	get_current_date(current_date, sizeof(current_date));
-	snprintf(counter_key, sizeof(counter_key), "login_count:%s", current_date);
-	snprintf(set_key, sizeof(set_key), "login_users:%s", current_date);
+// 	get_current_date(current_date, sizeof(current_date));
+// 	snprintf(counter_key, sizeof(counter_key), "login_count:%s", current_date);
+// 	snprintf(set_key, sizeof(set_key), "login_users:%s", current_date);
 
-	/* Get the Unix timestamp of the next morning */
-	expiry_time = get_expiry_time();
-	now = time(NULL);
-	seconds_to_midnight = (int)difftime(expiry_time, now);
+// 	/* Get the Unix timestamp of the next morning */
+// 	expiry_time = get_expiry_time();
+// 	now = time(NULL);
+// 	seconds_to_midnight = (int)difftime(expiry_time, now);
 
-	switch(reply->type) {
-		case REDIS_REPLY_INTEGER:
-			{
-				/* There is no record for the current login */
-				if (reply->integer == 0) {
-					slog(u->s, WEBDIS_INFO, "First login of the day, record login information", 0);
+// 	switch(reply->type) {
+// 		case REDIS_REPLY_INTEGER:
+// 			{
+// 				/* There is no record for the current login */
+// 				if (reply->integer == 0) {
+// 					slog(u->s, WEBDIS_INFO, "First login of the day, record login information", 0);
 
-					redisAsyncCommand(c, NULL, NULL, "MULTI");
-					/* Used to store the user ID that has logged in on that day */
-					redisAsyncCommand(c, NULL, NULL, "SADD %s %s", set_key, u->data);
-					/* Used to store the login count for the day */
-					redisAsyncCommand(c, NULL, NULL, "HINCRBY %s count 1", counter_key);
-					// redisAsyncCommand(c, NULL, NULL, "INCR total_login_count");
-					/* Set the expiration time of the collection and counter keys to the next morning */
-					redisAsyncCommand(c, NULL, NULL, "EXPIRE %s %d", set_key, seconds_to_midnight);
-					redisAsyncCommand(c, NULL, NULL, "EXPIRE %s %d", counter_key, seconds_to_midnight);
-					redisAsyncCommand(c, NULL, NULL, "EXEC");
-				}
-			}	
-			break;
-		default:
-			slog(u->s, WEBDIS_ERROR, "SISMEMBER command returns incorrect data", 0);
-			break;
-	}
-	free(u->data);
-	free(u);
-}
+// 					redisAsyncCommand(c, NULL, NULL, "MULTI");
+// 					/* Used to store the user ID that has logged in on that day */
+// 					redisAsyncCommand(c, NULL, NULL, "SADD %s %s", set_key, u->data);
+// 					/* Used to store the login count for the day */
+// 					redisAsyncCommand(c, NULL, NULL, "HINCRBY %s count 1", counter_key);
+// 					// redisAsyncCommand(c, NULL, NULL, "INCR total_login_count");
+// 					/* Set the expiration time of the collection and counter keys to the next morning */
+// 					redisAsyncCommand(c, NULL, NULL, "EXPIRE %s %d", set_key, seconds_to_midnight);
+// 					redisAsyncCommand(c, NULL, NULL, "EXPIRE %s %d", counter_key, seconds_to_midnight);
+// 					redisAsyncCommand(c, NULL, NULL, "EXEC");
+// 				}
+// 			}	
+// 			break;
+// 		default:
+// 			slog(u->s, WEBDIS_ERROR, "SISMEMBER command returns incorrect data", 0);
+// 			break;
+// 	}
+// 	free(u->data);
+// 	free(u);
+// }
+
+
+
 /* Determine whether the user has logged in on the day. 
  * If not, start increasing the number of logged-in users 
  * for the day, and the total number of logged-in users 
  * will be increased by one. At the same time, the user 
  * ID of the day will be saved and expired in the 
  * early morning of the next day.*/
-static void json_sismember_exec(redisAsyncContext *c, struct cmd *cmd) {
+// static void json_sismember_exec(redisAsyncContext *c, struct cmd *cmd) {
+// 	char current_date[20];
+// 	char set_key[256];
+// 	struct userdata *ud;
+
+// 	ud = (struct userdata*)calloc(1, sizeof(*ud));
+// 	ud->s = cmd->w->s;
+// 	ud->data = strdup(cmd->rparam->param.ureg.machine);
+
+// 	get_current_date(current_date, sizeof(current_date));
+// 	snprintf(set_key, sizeof(set_key), "login_users:%s", current_date);
+
+// 	/* Determine whether the account has been logged in on the same day*/
+// 	redisAsyncCommand(c, sismember_reply, 
+// 						(void*)ud, 
+// 						"SISMEMBER %s %s", 
+// 						set_key, 
+// 						cmd->rparam->param.ureg.machine);
+// } 
+
+static void sismember_start_reply(redisAsyncContext *c, void *r, void *privdata) {
+	(void)c;
+	redisReply *reply = r;
+	struct userdata *u = privdata;
+
+	if (reply == NULL) {
+		slog(u->s, WEBDIS_ERROR, "Null reply received", 0);
+		free(u->data);
+		free(u);
+		return;
+	}
+
+	if (reply->type == REDIS_REPLY_ERROR) {
+		slog(u->s, WEBDIS_ERROR, reply->str, 0);
+		free(u->data);
+		free(u);
+		return;
+	}
+
+	if (reply->type == REDIS_REPLY_INTEGER && reply->integer == 1) {
+		slog(u->s, WEBDIS_INFO, "Login recorded successfully", 0);
+	} else {
+		slog(u->s, WEBDIS_INFO, "Login not recorded, user already logged in", 0);
+	}
+
+	free(u->data);
+	free(u);
+}
+
+static void sismember_start(redisAsyncContext *c, struct cmd *cmd) {
 	char current_date[20];
-	char set_key[256];
+	char counter_key[256], set_key[256];
 	struct userdata *ud;
 
 	ud = (struct userdata*)calloc(1, sizeof(*ud));
@@ -1072,15 +1124,33 @@ static void json_sismember_exec(redisAsyncContext *c, struct cmd *cmd) {
 	ud->data = strdup(cmd->rparam->param.ureg.machine);
 
 	get_current_date(current_date, sizeof(current_date));
+
+	// Lua script to handle all operations atomically
+	const char *lua_script = 
+		"local set_key = KEYS[1] "
+		"local counter_key = KEYS[2] "
+		"local user_id = ARGV[1] "
+		"local expiry = tonumber(ARGV[2]) "
+		"if redis.call('SISMEMBER', set_key, user_id) == 0 then "
+		"    redis.call('SADD', set_key, user_id) "
+		"    redis.call('HINCRBY', counter_key, 'count', 1) "
+		"    redis.call('EXPIRE', set_key, expiry) "
+		"    redis.call('EXPIRE', counter_key, expiry) "
+		"end "
+		"return true";
+
+	
+	snprintf(counter_key, sizeof(counter_key), "login_count:%s", current_date);
 	snprintf(set_key, sizeof(set_key), "login_users:%s", current_date);
 
-	/* Determine whether the account has been logged in on the same day*/
-	redisAsyncCommand(c, sismember_reply, 
-						(void*)ud, 
-						"SISMEMBER %s %s", 
-						set_key, 
-						cmd->rparam->param.ureg.machine);
-} 
+	time_t expiry_time = get_expiry_time();
+	time_t now = time(NULL);
+	int seconds_to_midnight = (int)difftime(expiry_time, now);
+
+	// Execute the Lua script with the necessary keys and arguments
+	redisAsyncCommand(c, sismember_start_reply, NULL, "EVAL %s 2 %s %s %s %d",
+		lua_script, set_key, counter_key, ud->data, seconds_to_midnight);
+}
 
 void json_register_reply(redisAsyncContext *c, void *r, void *privdata) {
 	redisReply *reply = r;
@@ -1135,7 +1205,8 @@ void json_register_reply(redisAsyncContext *c, void *r, void *privdata) {
 				return;
 			}
 		}
-		json_sismember_exec(c, cmd);
+		// json_sismember_exec(c, cmd);
+		sismember_start(c, cmd);
 		break;
 	case REDIS_REPLY_ERROR:
 	default:
