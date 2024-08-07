@@ -41,4 +41,6 @@ void json_hgetorset_reply(redisAsyncContext *c, void *r, void *privdata);
 void json_authmulti_reply(redisAsyncContext *c, void *r, void *privdata);
 void json_authmulti_exec_reply(redisAsyncContext *c, void *r, void *privdata);
 
+void user_register(struct cmd *cmd);
+
 #endif

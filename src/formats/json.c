@@ -1124,6 +1124,105 @@ end:
 	free(u);
 }
 
+static void user_register_reply(redisAsyncContext *c, void *r, void *privdata) {
+    redisReply *reply = r;
+    struct cmd *cmd = privdata;
+    json_t *jroot = NULL;
+    char *jstr;
+
+    (void)c;
+    /* broken connection */
+    if(cmd == NULL) {
+        return;
+    }
+    /* broken Redis link */
+    if(reply == NULL) { 
+        format_send_error(cmd, 503, "Service Unavailable");
+        return;
+    }
+
+    jroot = json_object();
+    if(reply->type == REDIS_REPLY_ARRAY && reply->elements == 2) {
+        const char *user_data = reply->element[0]->str;
+        const char *status = reply->element[1]->str;
+
+        if (strcmp(status, "Added") == 0) {
+            slog(cmd->w->s, WEBDIS_INFO, "User added and counted successfully", 0);
+			json_object_set_new(jroot, "data", json_string(user_data));
+        } else if (strcmp(status, "Already Exists") == 0) {
+            slog(cmd->w->s, WEBDIS_INFO, "User already exists", 0);
+            json_object_set_new(jroot, "data", json_string(user_data));
+        }
+        json_object_set_new(jroot, "flag", json_string("OK"));
+    } else {
+        slog(cmd->w->s, WEBDIS_ERROR, "Unexpected reply from Lua script", 0);
+        json_object_set_new(jroot, "flag", json_string("FAIL"));
+    }
+
+    /* get JSON as string, possibly with JSONP wrapper */
+    jstr = json_string_output(jroot, cmd->jsonp);
+    /* send reply */
+    format_send_reply(cmd, jstr, strlen(jstr), "application/json");
+    /* cleanup */
+    json_decref(jroot);
+    free(jstr);
+}
+
+void user_register(struct cmd *cmd) {
+	char current_date[20];
+    char counter_key[256], set_key[256], total_login_key[256], userkey[256];
+
+	get_current_date(current_date, sizeof(current_date));
+
+	// Lua script to handle all operations atomically
+    const char *lua_script = 
+        "local set_key = KEYS[1] "
+        "local counter_key = KEYS[2] "
+        "local total_login_key = KEYS[3] "
+        "local userkey = KEYS[4] "
+        "local user_id = ARGV[1] "
+        "local user_data = ARGV[2] "
+        "local expiry = tonumber(ARGV[3]) "
+        "local user_exists = redis.call('HGET', userkey, user_id) "
+        "if user_exists then "
+		"	 if redis.call('SISMEMBER', set_key, user_id) == 0 then "
+        "    	 redis.call('SADD', set_key, user_id) "
+        "    	 redis.call('HINCRBY', counter_key, 'count', 1) "
+        "    	 redis.call('EXPIRE', set_key, expiry) "
+        "    	 redis.call('EXPIRE', counter_key, expiry) "
+		"    	 return {user_data, 'Added'} "
+		"	 else "
+        "    	 return {user_exists, 'Already Exists'} "
+		"	 end "
+        "else "
+        "    redis.call('HSET', userkey, user_id, user_data) "
+        "    redis.call('INCR', total_login_key) "
+		"	 if redis.call('SISMEMBER', set_key, user_id) == 0 then "
+        "    	 redis.call('SADD', set_key, user_id) "
+        "    	 redis.call('HINCRBY', counter_key, 'count', 1) "
+        "    	 redis.call('EXPIRE', set_key, expiry) "
+        "    	 redis.call('EXPIRE', counter_key, expiry) "
+        "    	 return {user_data, 'Added'} "
+		"	 else "
+		"		 return {user_data, 'Already Exists'} "
+		"	 end "
+        "end ";
+	
+	snprintf(counter_key, sizeof(counter_key), "login_count:%s", current_date);
+    snprintf(set_key, sizeof(set_key), "login_users:%s", current_date);
+    snprintf(total_login_key, sizeof(total_login_key), "total_login_count");
+    snprintf(userkey, sizeof(userkey), "userkey:%s", cmd->rparam->param.ureg.machine);
+
+    time_t expiry_time = get_expiry_time();
+    time_t now = time(NULL);
+    int seconds_to_midnight = (int)difftime(expiry_time, now);
+
+    // Execute the Lua script with the necessary keys and arguments
+    redisAsyncCommand(cmd->ac, user_register_reply, (void*)cmd, "EVAL %s 4 %s %s %s %s %s %s %d",
+        lua_script, set_key, counter_key, total_login_key, userkey, 
+        cmd->rparam->param.ureg.machine, cmd->rparam->param.ureg.data, seconds_to_midnight);
+}
+
 static void sismember_start(redisAsyncContext *c, struct cmd *cmd) {
 	char current_date[20];
 	char counter_key[256], set_key[256];
@@ -1150,7 +1249,6 @@ static void sismember_start(redisAsyncContext *c, struct cmd *cmd) {
 		"else "
         "    return 'Already Exists' "
         "end";
-
 	
 	snprintf(counter_key, sizeof(counter_key), "login_count:%s", current_date);
 	snprintf(set_key, sizeof(set_key), "login_users:%s", current_date);
