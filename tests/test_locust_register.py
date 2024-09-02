@@ -90,14 +90,22 @@ def generate_random_uuid():
 class UserBehavior(TaskSet):
     @task
     def test_post(self):
-        self.client.post("/register", json={
-            "machine":generate_random_uuid(),
-            "username":random_username(),
+        response = self.client.post("/register", json={
+            "machine": generate_random_uuid(),
+            "username": random_username(),
             "area": random_area(),
             "device": random_device(),
             "logintime": generate_random_today_time(),
-            "flag":0})
+            "flag": 0
+        })
+        
+        # Print the response status and content
+        print("Response Status Code:", response.status_code)
+        print("Response Content:", response.text)
+        
+        # Optionally, add assertions to validate the response
+        assert response.status_code == 200  # Check for a successful status code
 
 class WebsiteUser(HttpUser):
     tasks = [UserBehavior]
-    wait_time = between(1, 5)
+    wait_time = between(1, 10)
