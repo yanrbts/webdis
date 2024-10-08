@@ -506,6 +506,7 @@ if __name__ == "__main__":
                         help="increase output verbosity")
 
     signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGHUP, signal.SIG_IGN)
     
     try:
         args = parser.parse_args()
