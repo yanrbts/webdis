@@ -89,16 +89,24 @@ def generate_random_uuid():
     return random_uuid
 
 def register():
-    url = "http://192.168.124.204:7379/register"
+    url = "http://101.42.7.165:7379/register"
 
-    data = {
-        "machine": generate_random_uuid(),
-        "username": random_username(),
-        "area": random_area(),
-        "device": random_device(),
-        "logintime": generate_random_today_time(),
-        "flag":0
-    }
+    # data = {
+    #     "machine": generate_random_uuid(),
+    #     "username": random_username(),
+    #     "area": random_area(),
+    #     "device": random_device(),
+    #     "logintime": generate_random_today_time(),
+    #     "flag":0
+    # }
+    
+    data = {"area":"北京市/北京市",
+            "device":"Android",
+            "flag":1,
+            "logintime":"2024-09-09 16:23:18",
+            "username":"7f69910dfe93f9124d34bb00356a642f9e4502fafc30a06da2a63d573def9773",
+            "machine":"7f69910dfe93f9124d34bb00356a642f9e4502fafc30a06da2a63d573def9773"
+            }
 
     json_data = json.dumps(data)
     response = requests.post(url, data=json_data, 
@@ -111,5 +119,5 @@ def register():
         print('Response:', response.text)
 
 if __name__ == "__main__":
-    for _ in range(1000):
+    for _ in range(1):
         register()

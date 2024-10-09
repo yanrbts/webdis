@@ -249,11 +249,22 @@ def get_file(rds, keys):
         for inner_key, json_data in value.items():
             try:
                 data = json.loads(json_data.decode('utf-8'))
-                filepath = data.get('filepath', '')
-                if not filepath:
-                    continue
-                filename = filepath.split('/')[-1]
+                # filepath = data.get('filepath', '')
+                # if not filepath:
+                #     continue
+                # filename = filepath.split('/')[-1]
 
+                # suffix = filename.split('.')[-1]
+                # if suffix:
+                #     if suffix not in suffix_map:
+                #         suffix_map[suffix] = 1
+                #     else:
+                #         suffix_map[suffix] += 1
+
+                filename = data.get('sourceFileName', '')
+                if not filename:
+                    continue
+                
                 suffix = filename.split('.')[-1]
                 if suffix:
                     if suffix not in suffix_map:

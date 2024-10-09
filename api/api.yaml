@@ -91,6 +91,10 @@ paths:
                 filepath:
                   type: string
                   example: "/path/to/file1.txt"
+                sourceFileName:
+                  type: string
+                  example: "example.txt"
+                  description: "源文件名"
                 machine:
                   type: string
                   example: "f526255265340d994510f8d1652e1eb1"
@@ -183,6 +187,10 @@ paths:
                           type: string
                           format: date
                           example: "2024-05-23"
+                        sourceFileName:
+                          type: string
+                          example: "example.txt"
+                          description: "源文件名"
                         action:
                           type: integer
                           example: 0
@@ -230,6 +238,10 @@ paths:
                   type: string
                   format: date
                   example: "2024-05-23"
+                sourceFileName:
+                  type: string
+                  example: "example.txt"
+                  description: "源文件名"
                 action:
                   type: integer 
                   example: 0
@@ -241,6 +253,7 @@ paths:
                 - filepath
                 - username
                 - time
+                - sourceFileName
                 - action
       responses:
         '200':
