@@ -104,7 +104,7 @@ def yaml_to_word_api_document(yaml_file, word_file):
     doc = Document()
 
     # 添加 API 文档标题
-    doc.add_heading(f"{yaml_data['info']['title']} API Documentation", 0)
+    doc.add_heading(f"{yaml_data['info']['title']} Documentation", 0)
     doc.add_paragraph(f"Version: {yaml_data['info']['version']}")
     doc.add_paragraph(f"Description: {yaml_data['info']['description']}")
     doc.add_paragraph("\n")
@@ -165,19 +165,49 @@ def yaml_to_word_api_document(yaml_file, word_file):
                             properties = schema.get('properties', {})
                             
                             # 添加响应体表格
-                            table = doc.add_table(rows=1, cols=2)
+                            table = doc.add_table(rows=1, cols=4)
                             hdr_cells = table.rows[0].cells
                             hdr_cells[0].text = 'Field'
                             hdr_cells[1].text = 'Type'
+                            hdr_cells[2].text = 'Description'
+                            hdr_cells[3].text = 'Example'
 
                             # 设置表头背景为暗灰色
                             for hdr_cell in hdr_cells:
                                 set_cell_background(hdr_cell, 'D3D3D3')  # 使用暗灰色 (hex 代码为 D3D3D3)
+                            
+                            def add_property_rows(properties, parent_key=''):
+                                for field, field_info in properties.items():
+                                    row_cells = table.add_row().cells
+                                    field_name = f"{parent_key}.{field}" if parent_key else field
+                                    row_cells[0].text = field_name
+                                    field_type = field_info.get('type', 'N/A')
+                                    field_description = field_info.get('description', 'N/A')
+                                    field_example = field_info.get('example', 'N/A')
 
-                            for field, field_info in properties.items():
-                                row_cells = table.add_row().cells
-                                row_cells[0].text = field
-                                row_cells[1].text = field_info.get('type', 'N/A')
+                                    row_cells[1].text = field_type
+                                    row_cells[2].text = field_description
+                                    row_cells[3].text = str(field_example)
+
+                                    if field_type == 'array':
+                                        item_type = field_info.get('items', {}).get('type', 'object')
+                                        row_cells[1].text = f"Array of {item_type}"
+                                        if item_type == 'object':
+                                            nested_properties = field_info['items'].get('properties', {})
+                                            add_property_rows(nested_properties, field_name)
+                                    elif field_type == 'object':
+                                        row_cells[1].text = 'Object'
+                                        nested_properties = field_info.get('properties', {})
+                                        add_property_rows(nested_properties, field_name)
+                                    else:
+                                        row_cells[1].text = field_type
+
+                            add_property_rows(properties)
+
+                            # for field, field_info in properties.items():
+                            #     row_cells = table.add_row().cells
+                            #     row_cells[0].text = field
+                            #     row_cells[1].text = field_info.get('type', 'N/A')
 
     # 保存 Word 文档
     doc.save(word_file)
